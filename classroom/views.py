@@ -1,3 +1,4 @@
+from django.http import response
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -8,6 +9,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from .serializers import ClassSerializer, SessionSerializer, ClassMembershipSerializer, AttendanceSerializer
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework_simplejwt.views import TokenRefreshView
 
 
 class RegisterView(generics.CreateAPIView):
@@ -24,26 +26,80 @@ class RegisterView(generics.CreateAPIView):
             'message': 'User created successfully'
         }, status=status.HTTP_201_CREATED)
 
-# kiem tra vai tro user trong DB chu khong goi truc tiep tu user
+
 class CustomLoginView(TokenObtainPairView):
     def post(self, request, *args, **kwargs):
-        try:
-            response = super().post(request, *args, **kwargs)  # xác thực SimpleJWT
-            if response.status_code == status.HTTP_200_OK:
-                email = request.data.get('email')
-                user = User.objects.get(email=email)  # Lấy user từ DB
-                response.data['user'] = {
-                    'id': user.id,
-                    'email': user.email,
-                    'role': user.role
-                }
-            return response
-        except TokenError as e:
-            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)  
-        except User.DoesNotExist:
-            return Response({'detail': 'User not found'}, status=status.HTTP_400_BAD_REQUEST)
-        except Exception as e:
-            return Response({'detail': f'An unexpected error occurred: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        response = super().post(request, *args, **kwargs)
+        if response.status_code == 200:
+            access_token = response.data['access']
+            refresh_token = response.data['refresh']
+            response.set_cookie(
+                'access_token',
+                access_token,
+                httponly=True,
+                secure=False,
+                samesite='Lax',
+                max_age=1800  
+            )
+            response.set_cookie(
+                'refresh_token',
+                refresh_token,
+                httponly=True,
+                secure=False,
+                samesite='Lax',
+                max_age=86400  
+            )
+            
+            del response.data['access']
+            del response.data['refresh']
+            email = request.data.get('email')
+            user = User.objects.get(email=email)
+            response.data['user'] = {
+                'id': user.id,
+                'email': user.email,
+                'role': user.role
+            }
+            response.data['message'] = 'Login successful'
+        return response
+
+class LogoutView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        response = Response(status=status.HTTP_200_OK)
+        response.delete_cookie('access_token')
+        response.delete_cookie('refresh_token')
+        response.data['message'] = 'Logout successful'
+        return response
+        
+#Token refresh
+class CustomTokenRefreshView(TokenRefreshView):
+    def post(self, request, *args, **kwargs):
+        response = super().post(request, *args, **kwargs)
+        if response.status_code == 200:
+            access_token = response.data['access']
+            response.set_cookie(
+                'access_token',
+                access_token,
+                httponly=True,
+                secure=False,
+                samesite='Lax',
+                max_age=1800  
+            )
+            if 'refresh' in response.data:
+                refresh_token = response.data['refresh']
+                response.set_cookie(
+                    'refresh_token',
+                    refresh_token,
+                    httponly=True,
+                    secure=False,
+                    samesite='Lax',
+                    max_age=86400  
+                )
+                del response.data['access']
+            del response.data['refresh']
+            response.data['message'] = 'Token refreshed successfully'
+        return response
 
 # ClassView
 class ClassListCreateView(generics.ListCreateAPIView):
@@ -52,9 +108,10 @@ class ClassListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
 
     def perform_create(self, serializer):
+        user = self.request.user
         if self.request.user.role not in ['lecturer', 'admin']:
             raise PermissionDenied("Only lecturers and admin can create classes")
-        serializer.save(lecturer=self.request.user)
+        serializer.save(created_by=user, lecturer = user if user.role() == 'lecturer' else None)
 
     def get_queryset(self):
         if self.request.user.role == 'admin':
@@ -121,6 +178,7 @@ class SessionDetailView(generics.RetrieveUpdateDestroyAPIView):
             raise PermissionDenied("You do not have permission to access this session")
         return obj
 
+# Invite user by admin and lecturer
 class InviteUserView(generics.CreateAPIView):
     serializer_class = ClassMembershipSerializer
     permission_classes = [IsAuthenticated]
@@ -134,6 +192,7 @@ class InviteUserView(generics.CreateAPIView):
         serializer.save()
         print(f'invited {serializer.validated_data['user'].email} to {serializer.validated_data['class_id'].name} as {serializer.validated_data['role']}')
 
+# Manage attendance 
 class AttendanceView(generics.ListCreateAPIView):
     queryset = Attendance.objects.all()
     serializer_class = AttendanceSerializer
@@ -146,3 +205,44 @@ class AttendanceView(generics.ListCreateAPIView):
             raise ValidationError("You have already attended this session")
         serializer.save(user=self.request.user)
 
+# Manage materials
+class MaterialView(generics.ListCreateAPIView):
+    queryset = Material.objects.all()
+    serializer_class = MaterialSerializer
+    permission_classes = [IsAuthenticated]
+
+    def perform_create(self, serializer):
+        if self.request.user.role not in ['lecturer', 'admin']:
+            raise PermissionDenied("Only lecturers and admin can upload materials")
+        serializer.instance._request_user = self.request.user
+        serializer.save()
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.role == 'admin':
+            return Material.objects.all()
+        elif user.role == 'lecturer':
+            return Material.objects.filter(class_id__lecturer=user)
+        return Material.objects.filter(class_id__classmembership__user=user, class_id__classmembership__role='student')
+
+# Manage announcements
+class AnnouncementView(generics.ListCreateAPIView):
+    queryset = Announcement.objects.all()
+    serializer_class = AnnouncementSerializer
+    permission_classes = [IsAuthenticated]
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        if user.role not in ['lecturer', 'admin']:
+            raise PermissionDenied("Only lecturers and admin can create announcements")
+        serializer.instance._request_user = user
+        announcement = serializer.save(posted_by = user)
+        send_announcement_email.delay(announcement.class_id.id, announcement.title)
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.role == 'admin':
+            return Material.objects.all()
+        elif user.role == 'lecturer':
+            return Announcement.objects.filter(class_id__lecturer=user)
+        return Announcement.objects.filter(class_id__classmembership__user=user, class_id__classmembership__role='student')
