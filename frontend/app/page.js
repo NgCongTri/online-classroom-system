@@ -2,6 +2,8 @@
 import { useState } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
+import api from './utils/api';
+import { useAuth } from './hook/useAuth';
 
 export default function Home() {
   const [formData, setFormData] = useState({ email: '', password: '' });
@@ -11,6 +13,7 @@ export default function Home() {
   const [rememberMe, setRememberMe] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const router = useRouter();
+  const { login } = useAuth();  
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -47,19 +50,21 @@ export default function Home() {
     }
     
     try {
-      const response = await axios.post('http://localhost:8000/api/login/', formData, {
-        headers: { 'Content-Type': 'application/json' },
-      });
-      localStorage.setItem('token', response.data.access);
-      localStorage.setItem('user', JSON.stringify(response.data.user));
-      if (rememberMe) {
-        localStorage.setItem('rememberMe', 'true');
+      const response = await api.post('/login/', formData);  
+      if (response.status == 200) {
+        if (rememberMe) {
+          console.log('Remember me enabled');
+        }
+        setMessage('Login successful!');
+        setShowSuccess(true);
+        setTimeout(() => router.push('/dashboard'), 2000);
+      } 
+      else {
+        setMessage(response.message || 'Login failed!');
+        setShowSuccess(false);
       }
-      setMessage('Login successful!');
-      setShowSuccess(true);
-      setTimeout(() => router.push('/dashboard'), 2000);
     } catch (error) {
-      setMessage(error.response?.data?.detail || 'Login failed! Email or password is incorrect.');
+      setMessage(error.response?.data?.detail || 'Login failed!');
     }
     setLoading(false);
   };

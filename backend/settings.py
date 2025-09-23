@@ -48,9 +48,12 @@ INSTALLED_APPS = [
     'classroom',
 ]
 
+CORS_ALLOW_METHODS = ['GET', 'POST', 'OPTIONS']
+CORS_ALLOW_HEADERS = ['*']
+
 MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',
     'corsheaders.middleware.CorsMiddleware',
+    'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -136,7 +139,7 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",  # Frontend React
+    "http://localhost:3000", 
     "http://127.0.0.1:3000",
 ]
 CORS_ALLOW_CREDENTIALS = True
@@ -144,6 +147,9 @@ CORS_ALLOW_CREDENTIALS = True
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'classroom.authentication.CookieJWTAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
@@ -154,9 +160,11 @@ SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30), 
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),   
     'AUTH_COOKIE': 'access_token',
+    'AUTH_COOKIE_REFRESH': 'refresh_token',
     'AUTH_COOKIE_HTTP_ONLY': True,
     'AUTH_COOKIE_SECURE': False,
     'AUTH_COOKIE_SAMESITE': 'Lax',
+    'AUTH_COOKIE_USE': True,
 }
 AUTH_USER_MODEL = 'classroom.User'
-
+AUTH_COOKIE_USE: True

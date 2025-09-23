@@ -43,11 +43,19 @@ class Class(models.Model):
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_classes', 
         null=True, blank=True) 
     created_at = models.DateTimeField(auto_now_add=True)
-    class_code = models.CharField(max_length=10, unique=True, default=''.join(random.choices(string.ascii_uppercase + string.digits, k=6)))
+    class_code = models.CharField(max_length=10, unique=True, null=True, blank=True)
     is_open_enrollment = models.BooleanField(default=False)
 
     def __str__(self):
         return self.name
+    
+    def save(self, *args, **kwargs):
+        if self.class_code and self.class_code.strip():
+            if Class.objects.filter(class_code=self.class_code).exclude(id=self.id).exists():
+                raise ValidationError("Class code already exists")
+        elif not self.class_code: 
+            self.class_code = None
+        super().save(*args, **kwargs)
 
     class Meta:
         ordering = ['-created_at']
@@ -115,6 +123,6 @@ class Announcement(models.Model):
         return self.title
 
     def save(self, *args, **kwargs):
-        if not self.uploaded_by and hasattr(self, '_request_user'):
+        if not self.posted_by and hasattr(self, '_request_user'):
             self.posted_by = self._request_user
         super().save(*args, **kwargs)

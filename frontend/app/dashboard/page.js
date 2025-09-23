@@ -1,16 +1,14 @@
 'use client';
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useAuth } from '../hook/useAuth';
 
 export default function Dashboard() {
-    const router = useRouter();
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
-
-    useEffect(() => {
-        if (!localStorage.getItem('token')) {
-            router.push('/');
-        }
-    }, [router]);
+    const {user, loading, logout} = useAuth();
+    if (loading) {
+        return <div className="min-h-screen flex items-center justify-center bg-[#0a0a0f] text-white">loading...</div>;
+    }
+    if (!user) {
+        return <div className="min-h-screen flex items-center justify-center bg-[#0a0a0f] text-white">You must login to access this page!</div>;
+    }
 
     return (
         <div className="min-h-screen bg-surface-100 p-8">

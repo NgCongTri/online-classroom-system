@@ -2,38 +2,26 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
+import { useAuth } from './hook/useAuth';
+import api from '../utils/api';
 
 export default function Classes() {
-    const [user, setUser] = useState(null);
+    const {user,loading} = useAuth();
     const [classes, setClasses] = useState([]);
     const [classForm, setClassForm] = useState({ name: '', description: '', start_date: '', end_date: '' });
     const [message, setMessage] = useState('');
-    const [loading, setLoading] = useState(false);
-    const router = useRouter();
 
-    const API_URL = 'http://localhost:8000/api/';
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
 
-    // Kiểm tra đăng nhập và lấy danh sách lớp học
     useEffect(() => {
-        const storedUser = localStorage.getItem('user');
-        if (!storedUser || !token) {
-        router.push('/');
-        return;
+        if (!loading && !user) {
+            fetchClasses();
         }
-        setUser(JSON.parse(storedUser));
-        fetchClasses();
-    }, []);
+    }, [user, loading]);
 
-    // Tạo instance axios với header Authorization
-    const axiosInstance = axios.create({
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    });
-
-    // Lấy danh sách lớp học
+    
     const fetchClasses = async () => {
         try {
-        const response = await axiosInstance.get(`${API_URL}classes/`);
+        const response = await api.get(`/classes/`);
         setClasses(response.data);
         setMessage('');
         } catch (error) {
@@ -44,10 +32,9 @@ export default function Classes() {
     // Xử lý tạo lớp học mới
     const handleClassSubmit = async (e) => {
         e.preventDefault();
-        setLoading(true);
         setMessage('');
         try {
-        await axiosInstance.post(`${API_URL}classes/`, classForm);
+        await api.post(`/classes/`, classForm);
         setMessage('Tạo lớp học thành công!');
         setClassForm({ name: '', description: '', start_date: '', end_date: '' });
         fetchClasses();
@@ -65,8 +52,11 @@ export default function Classes() {
         router.push('/');
     };
 
-    if (!user) {
+    if (loading) {
         return <div className="min-h-screen flex items-center justify-center bg-[#0a0a0f] text-white">Đang tải...</div>;
+    }
+    if (!user) {
+        return <div className="min-h-screen flex items-center justify-center bg-[#0a0a0f] text-white">You must login to access this page!</div>;
     }
 
     return (
