@@ -3,7 +3,7 @@ from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
-from .serializers import UserSerializer
+from .serializers import UserSerializer, RegistrationSerializer, AdminUserSerializer
 from .models import User, Class, Session, ClassMembership, Attendance , Material, Announcement
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -12,21 +12,44 @@ from .task import send_announcement_email
 from rest_framework.decorators import api_view, permission_classes,authentication_classes
 from rest_framework_simplejwt.views import TokenRefreshView
 from .authentication import CookieJWTAuthentication
+import logging
 
+logger = logging.getLogger(__name__)
 
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
-    serializer_class = UserSerializer
-    permission_classes = [] 
-
+    serializer_class = RegistrationSerializer  # Use RegistrationSerializer instead
+    permission_classes = [AllowAny]
+    
     def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        user = serializer.save()
-        return Response({
-            'user': UserSerializer(user, context=self.get_serializer_context()).data,
-            'message': 'User created successfully'
-        }, status=status.HTTP_201_CREATED)
+        try:
+            logger.info(f"Register request data: {request.data}")
+            
+            serializer = self.get_serializer(data=request.data)
+            if serializer.is_valid():
+                user = serializer.save()
+                return Response({
+                    'message': 'User registered successfully',
+                    'user': {
+                        'id': user.id,
+                        'username': user.username,
+                        'email': user.email,
+                        'role': user.role
+                    }
+                }, status=status.HTTP_201_CREATED)
+            else:
+                logger.error(f"Validation errors: {serializer.errors}")
+                return Response({
+                    'error': 'Validation failed',
+                    'details': serializer.errors
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+        except Exception as e:
+            logger.error(f"Registration error: {str(e)}")
+            return Response({
+                'error': 'Registration failed',
+                'message': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class CustomLoginView(TokenObtainPairView):
@@ -63,6 +86,26 @@ class CustomLoginView(TokenObtainPairView):
             }
             response.data['message'] = 'Login successful'
         return response
+
+class UserListCreateView(generics.ListCreateAPIView):
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        if self.request.user.role != 'admin':
+            raise PermissionDenied("Only admins can view users")
+        return User.objects.all()
+
+class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        if self.request.user.role != 'admin':
+            raise PermissionDenied("Only admins can view users")
+        return User.objects.all()
 
 @api_view(['GET'])
 @authentication_classes([CookieJWTAuthentication])
@@ -168,10 +211,10 @@ class SessionListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
 
     def perform_create(self, serializer):
-        if self.request.user.role != 'lecturer':
+        if self.request.user.role not in ['lecturer', 'admin']:
             raise PermissionDenied("Only lecturers can create sessions")
         class_id = serializer.validated_data['class_id']
-        if class_id.lecturer != self.request.user:
+        if class_id.lecturer != self.request.user and self.request.user.role != 'admin':
             raise PermissionDenied("You do not have permission to create a session for this class")
         serializer.save()
 
@@ -239,23 +282,83 @@ class MaterialView(generics.ListCreateAPIView):
             return Material.objects.filter(class_id__lecturer=user)
         return Material.objects.filter(class_id__classmembership__user=user, class_id__classmembership__role='student')
 
-# Manage announcements
-class AnnouncementView(generics.ListCreateAPIView):
-    queryset = Announcement.objects.all()
+# SystemAnnouncementView
+class SystemAnnouncementView(generics.ListCreateAPIView):
     serializer_class = AnnouncementSerializer
     permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Announcement.objects.filter(type="system")
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        if user.role != 'admin':
+            raise PermissionDenied("Only admin can create system announcements")
+        serializer.save(posted_by=user, type="system", class_id=None)
+
+
+# ClassAnnouncementView
+class ClassAnnouncementView(generics.ListCreateAPIView):
+    serializer_class = AnnouncementSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        class_id = self.kwargs['class_id']
+        user = self.request.user
+
+        if user.role == 'admin':
+            return Announcement.objects.filter(class_id=class_id, type="class")
+        elif user.role == 'lecturer':
+            return Announcement.objects.filter(class_id__lecturer=user, class_id=class_id, type="class")
+        return Announcement.objects.filter(class_id=class_id, class_id__classmembership__user=user, type="class")
 
     def perform_create(self, serializer):
         user = self.request.user
         if user.role not in ['lecturer', 'admin']:
-            raise PermissionDenied("Only lecturers and admin can create announcements")
-        announcement = serializer.save(posted_by=user)
-        send_announcement_email(announcement.class_id.id, announcement.title)
+            raise PermissionDenied("Only lecturers or admins can create class announcements")
+        serializer.save(posted_by=user, type="class")
 
-    def get_queryset(self):
-        user = self.request.user
-        if user.role == 'admin':
-            return Material.objects.all()
-        elif user.role == 'lecturer':
-            return Announcement.objects.filter(class_id__lecturer=user)
-        return Announcement.objects.filter(class_id__classmembership__user=user, class_id__classmembership__role='student')
+class AdminCreateUserView(generics.CreateAPIView):
+    """Admin-only endpoint to create users with any role"""
+    queryset = User.objects.all()
+    serializer_class = AdminUserSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def create(self, request, *args, **kwargs):
+        # Check if user is admin
+        if request.user.role != 'admin':
+            return Response({
+                'error': 'Permission denied',
+                'message': 'Only admins can create users'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        try:
+            logger.info(f"Admin create user request data: {request.data}")
+            
+            serializer = self.get_serializer(data=request.data)
+            if serializer.is_valid():
+                user = serializer.save()
+                return Response({
+                    'message': 'User created successfully',
+                    'user': {
+                        'id': user.id,
+                        'username': user.username,
+                        'email': user.email,
+                        'role': user.role
+                    }
+                }, status=status.HTTP_201_CREATED)
+            else:
+                logger.error(f"Validation errors: {serializer.errors}")
+                return Response({
+                    'error': 'Validation failed',
+                    'details': serializer.errors
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+        except Exception as e:
+            logger.error(f"User creation error: {str(e)}")
+            return Response({
+                'error': 'User creation failed',
+                'message': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+

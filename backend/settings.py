@@ -48,8 +48,6 @@ INSTALLED_APPS = [
     'classroom',
 ]
 
-CORS_ALLOW_METHODS = ['GET', 'POST', 'OPTIONS']
-CORS_ALLOW_HEADERS = ['*']
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
@@ -142,7 +140,11 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000", 
     "http://127.0.0.1:3000",
 ]
+
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_METHODS = ['GET', 'POST', 'OPTIONS', 'PUT', 'DELETE']
+CORS_ALLOW_HEADERS = ['Content-Type', 'Authorization', '*']
+
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (

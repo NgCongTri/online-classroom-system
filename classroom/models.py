@@ -117,7 +117,13 @@ class Announcement(models.Model):
     content = models.TextField()
     posted_at = models.DateTimeField(auto_now_add=True)
     posted_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='posted_announcements', 
-        null=True, blank=True) 
+        null=True, blank=True)
+
+    ANNOUNCEMENT_TYPE = (
+        ('class', 'Class'),
+        ('system', 'System'),
+    )
+    type = models.CharField(max_length=10, choices=ANNOUNCEMENT_TYPE, default='class')
 
     def __str__(self):
         return self.title

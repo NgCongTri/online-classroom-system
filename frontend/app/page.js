@@ -1,9 +1,7 @@
 'use client';
 import { useState } from 'react';
-import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import api from './utils/api';
-import { useAuth } from './hook/useAuth';
 
 export default function Home() {
   const [formData, setFormData] = useState({ email: '', password: '' });
@@ -13,7 +11,6 @@ export default function Home() {
   const [rememberMe, setRememberMe] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const router = useRouter();
-  const { login } = useAuth();  
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -50,23 +47,33 @@ export default function Home() {
     }
     
     try {
-      const response = await api.post('/login/', formData);  
-      if (response.status == 200) {
-        if (rememberMe) {
-          console.log('Remember me enabled');
-        }
+      const response = await api.post('/login/', {
+        email: formData.email,
+        password: formData.password,
+        remember_me: rememberMe
+      });
+      
+      if (response.status === 200) {
+        const user = response.data.user;
         setMessage('Login successful!');
         setShowSuccess(true);
-        setTimeout(() => router.push('/dashboard'), 2000);
-      } 
-      else {
-        setMessage(response.message || 'Login failed!');
-        setShowSuccess(false);
+        
+        setTimeout(() => {
+          if (user.role === 'admin') {
+            router.push('/dashboard/admin');
+          } else if (user.role === 'lecturer') {
+            router.push('/dashboard/lecturer');
+          } else {
+            router.push('/dashboard/student');
+          }
+        }, 1200);
       }
     } catch (error) {
-      setMessage(error.response?.data?.detail || 'Login failed!');
+      console.error('Login error:', error);
+      setMessage(error.response?.data?.error || error.response?.data?.detail || 'Login failed!');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleForgotPassword = (e) => {
@@ -89,8 +96,8 @@ export default function Home() {
 
       <div className="relative z-10 w-full max-w-sm bg-[#151520] border border-[#2a2a35] rounded-xl p-8 shadow-2xl backdrop-blur-md font-georgia transition-all duration-300 hover:shadow-neon">
         <div className="flex justify-center mb-5">
-          <div className="text-4xl bg-gradient-to-r from-[#00ff88] to-[#0099ff] bg-clip-text text-transparent filter drop-shadow-neon animate-pulse">
-            ⚡
+          <div className= "font-pacifico text-4xl bg-gradient-to-r from-[#00ff88] to-[#0099ff] bg-clip-text text-transparent drop-shadow-[0_0_15px_#00ff88] animate-pulse">
+            OCS
           </div>
         </div>
 
@@ -98,16 +105,6 @@ export default function Home() {
           <h2 className="text-xl font-semibold text-white mb-2">Sign In</h2>
           <p className="text-[#a0a0b0] text-sm">Access your account</p>
         </div>
-
-        {showSuccess && (
-          <div className="text-center mb-6 opacity-100 transition-all duration-500">
-            <div className="w-12 h-12 mx-auto mb-3 bg-gradient-to-r from-[#00ff88] to-[#0099ff] rounded-full flex items-center justify-center text-[#0a0a0f] text-xl animate-successPulse shadow-neon-success">
-              ✓
-            </div>
-            <h3 className="text-white text-lg font-semibold mb-1">Welcome back!</h3>
-            <p className="text-[#a0a0b0] text-sm">Redirecting to your dashboard...</p>
-          </div>
-        )}
 
         {message && !showSuccess && (
           <div className={`mb-5 p-3 text-center rounded-md text-sm transition-all duration-300 ${
@@ -200,8 +197,8 @@ export default function Home() {
             <span className="px-2 bg-[#151520] text-[#a0a0b0]">or</span>
           </div>
         </div>
-
-        <div className="text-center">
+      
+      <div className="text-center">
           <button
             onClick={handleRegister}
             className="w-full bg-[#1a1a25] border border-[#2a2a35] rounded-md py-2.5 text-[#00ff88] font-medium text-sm hover:bg-[#2a2a35] hover:border-[#00ff88] hover:shadow-social-glow transition-all duration-300"
@@ -264,7 +261,8 @@ export default function Home() {
         .peer-valid ~ label { @apply -top-5 left-2 scale-90 text-[#00ff88]; }
         .peer:focus ~ label { @apply -top-5 left-2 scale-90 text-[#00ff88]; }
         .peer:has-value ~ label { @apply -top-5 left-2 scale-90 text-[#00ff88]; }
-      `}</style>
+      `
+      }</style>
     </div>
   );
 }
