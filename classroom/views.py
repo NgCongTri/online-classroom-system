@@ -1,24 +1,28 @@
 from django.http import response
 from rest_framework import generics, status
 from rest_framework.response import Response
-from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
-from .serializers import UserSerializer, RegistrationSerializer, AdminUserSerializer
-from .models import User, Class, Session, ClassMembership, Attendance , Material, Announcement
+from .serializers import (
+    UserSerializer, RegistrationSerializer, AdminUserSerializer, 
+    LoginHistorySerializer, ClassSerializer, SessionSerializer,
+    ClassMembershipSerializer, AttendanceSerializer, MaterialSerializer,
+    AnnouncementSerializer
+)
+from .models import User, Class, Session, ClassMembership, Attendance, Material, Announcement, LoginHistory
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.exceptions import PermissionDenied, ValidationError
-from .serializers import ClassSerializer, SessionSerializer, ClassMembershipSerializer, AttendanceSerializer, MaterialSerializer, AnnouncementSerializer
 from .task import send_announcement_email
-from rest_framework.decorators import api_view, permission_classes,authentication_classes
-from rest_framework_simplejwt.views import TokenRefreshView
-from .authentication import CookieJWTAuthentication
+from django.utils import timezone
 import logging
+from rest_framework.decorators import api_view, permission_classes, authentication_classes
+from .authentication import CookieJWTAuthentication
 
 logger = logging.getLogger(__name__)
 
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
-    serializer_class = RegistrationSerializer  # Use RegistrationSerializer instead
+    serializer_class = RegistrationSerializer 
     permission_classes = [AllowAny]
     
     def create(self, request, *args, **kwargs):
@@ -51,41 +55,120 @@ class RegisterView(generics.CreateAPIView):
                 'message': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+class AdminCreateUserView(generics.CreateAPIView):
+    """Admin-only endpoint to create users with any role"""
+    queryset = User.objects.all()
+    serializer_class = AdminUserSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def create(self, request, *args, **kwargs):
+        # Check if user is admin
+        if request.user.role != 'admin':
+            return Response({
+                'error': 'Permission denied',
+                'message': 'Only admins can create users'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        try:
+            logger.info(f"Admin create user request data: {request.data}")
+            
+            serializer = self.get_serializer(data=request.data)
+            if serializer.is_valid():
+                user = serializer.save()
+                return Response({
+                    'message': 'User created successfully',
+                    'user': {
+                        'id': user.id,
+                        'username': user.username,
+                        'email': user.email,
+                        'role': user.role
+                    }
+                }, status=status.HTTP_201_CREATED)
+            else:
+                logger.error(f"Validation errors: {serializer.errors}")
+                return Response({
+                    'error': 'Validation failed',
+                    'details': serializer.errors
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+        except Exception as e:
+            logger.error(f"User creation error: {str(e)}")
+            return Response({
+                'error': 'User creation failed',
+                'message': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class CustomLoginView(TokenObtainPairView):
     def post(self, request, *args, **kwargs):
-        response = super().post(request, *args, **kwargs)
-        if response.status_code == 200:
-            access_token = response.data['access']
-            refresh_token = response.data['refresh']
-            response.set_cookie(
-                'access_token',
-                access_token,
-                httponly=True,
-                secure=False,
-                samesite='Lax',
-                max_age=1800  
-            )
-            response.set_cookie(
-                'refresh_token',
-                refresh_token,
-                httponly=True,
-                secure=False,
-                samesite='Lax',
-                max_age=86400  
-            )
+        try:
+            # Get the tokens first
+            response = super().post(request, *args, **kwargs)
             
-            del response.data['access']
-            del response.data['refresh']
-            email = request.data.get('email')
-            user = User.objects.get(email=email)
-            response.data['user'] = {
-                'id': user.id,
-                'email': user.email,
-                'role': user.role
-            }
-            response.data['message'] = 'Login successful'
-        return response
+            if response.status_code == 200:
+                email = request.data.get('email')
+                try:
+                    user = User.objects.get(email=email)
+                    
+                    # Get client info
+                    ip_address = request.META.get('REMOTE_ADDR', '127.0.0.1')
+                    user_agent = request.META.get('HTTP_USER_AGENT', '')
+                    
+                    # Create login history
+                    LoginHistory.objects.create(
+                        user=user,
+                        ip_address=ip_address,
+                        user_agent=user_agent            
+                    )
+                    
+                    # **FIX: ADD USER DATA TO RESPONSE** ✅
+                    response.data['user'] = {
+                        'id': user.id,
+                        'username': user.username,
+                        'email': user.email,
+                        'role': user.role
+                    }
+                    
+                    print(f"Login successful for user: {user.username}, role: {user.role}")  # Debug log
+                    
+                    # Set cookies
+                    access_token = response.data.get('access')
+                    refresh_token = response.data.get('refresh')
+                    
+                    if access_token:
+                        response.set_cookie(
+                            key='access_token',
+                            value=access_token,
+                            httponly=True,
+                            secure=False,  # Set to True in production with HTTPS
+                            samesite='Lax',
+                            max_age=3600  # 1 hour
+                        )
+                    
+                    if refresh_token:
+                        response.set_cookie(
+                            key='refresh_token',
+                            value=refresh_token,
+                            httponly=True,
+                            secure=False,  # Set to True in production with HTTPS
+                            samesite='Lax',
+                            max_age=86400  # 24 hours
+                        )
+                    
+                except User.DoesNotExist:
+                    return Response({
+                        'error': 'User not found',
+                        'message': 'Invalid credentials'
+                    }, status=status.HTTP_401_UNAUTHORIZED)
+                    
+            return response
+            
+        except Exception as e:
+            logger.error(f"Login error: {str(e)}")
+            return Response({
+                'error': 'Login failed',
+                'message': 'An error occurred during login',
+                'details': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class UserListCreateView(generics.ListCreateAPIView):
     queryset = User.objects.all()
@@ -112,6 +195,8 @@ class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
 @permission_classes([IsAuthenticated])
 def get_user(request):
     user = request.user
+    print(f"get_user called - User: {user.username}, Role: {user.role}")  # Debug log
+    
     return Response({
         'id': user.id,
         'username': user.username,
@@ -121,14 +206,36 @@ def get_user(request):
 
 class LogoutView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated]
-
+    
     def post(self, request):
-        response = Response(status=status.HTTP_200_OK)
-        response.delete_cookie('access_token')
-        response.delete_cookie('refresh_token')
-        return Response({"message": "Logout successful"}, status=200)
-        
-#Token refresh
+        try:
+            # Update login history - chỉ cần set logout_time
+            login_history = LoginHistory.objects.filter(
+                user=request.user,
+                logout_time__isnull=True  # Tìm session đang active
+            ).order_by('-login_time').first()
+            
+            if login_history:
+                login_history.logout_time = timezone.now()
+                login_history.save()
+            
+            response = Response({
+                'message': 'Logged out successfully'
+            }, status=status.HTTP_200_OK)
+            
+            response.delete_cookie('access_token')
+            response.delete_cookie('refresh_token')
+            
+            return response
+            
+        except Exception as e:
+            logger.error(f"Logout error: {str(e)}")
+            return Response({
+                'error': 'Logout failed',
+                'message': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+# Token refresh
 class CustomTokenRefreshView(TokenRefreshView):
     def post(self, request, *args, **kwargs):
         refresh_token = request.COOKIES.get("refresh_token")
@@ -152,6 +259,15 @@ class CustomTokenRefreshView(TokenRefreshView):
             response.data["message"] = "Token refreshed successfully"
         return response
 
+class LoginHistoryView(generics.ListAPIView):
+    serializer_class = LoginHistorySerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        if self.request.user.role == 'admin':
+            return LoginHistory.objects.select_related('user').order_by('-login_time')[:100]
+        return LoginHistory.objects.filter(user=self.request.user).select_related('user').order_by('-login_time')[:10]
+
 # ClassView
 class ClassListCreateView(generics.ListCreateAPIView):
     queryset = Class.objects.all()
@@ -162,36 +278,34 @@ class ClassListCreateView(generics.ListCreateAPIView):
         user = self.request.user
         if self.request.user.role not in ['lecturer', 'admin']:
             raise PermissionDenied("Only lecturers and admin can create classes")
-        serializer.save(created_by=user, lecturer = user if user.role == 'lecturer' else None)
+        serializer.save(created_by=user, lecturer=user if user.role == 'lecturer' else None)
 
     def get_queryset(self):
         if self.request.user.role == 'admin':
             return Class.objects.all()
         elif self.request.user.role == 'lecturer':
             return Class.objects.filter(lecturer=self.request.user)
-        return Class.objects.filter(classmembership__user=self.request.user , classmembership__role = 'student')
+        return Class.objects.filter(classmembership__user=self.request.user, classmembership__role='student')
 
 @api_view(['POST'])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated])
 def enroll_class(request):
     class_code = request.data.get('class_code')
     try:
-        class_obj = Class.objects.get(is_open_enrollment=True)
-        user = request.user if request.user.is_authenticated else None
-        if not user or user.role != 'student':
+        class_obj = Class.objects.get(class_code=class_code, is_open_enrollment=True)
+        user = request.user
+        
+        if user.role != 'student':
             return Response({'detail': 'You must be a student to enroll'}, status=status.HTTP_400_BAD_REQUEST)
         
         if ClassMembership.objects.filter(user=user, class_id=class_obj).exists():
             return Response({'detail': 'You are already enrolled in this class'}, status=status.HTTP_400_BAD_REQUEST)
         
-        if class_obj.class_code:  
-            if not class_code or class_code != class_obj.class_code:
-                return Response({'detail': 'Invalid class code'}, status=status.HTTP_400_BAD_REQUEST)
-        
         ClassMembership.objects.create(user=user, class_id=class_obj, role='student')
         return Response({'detail': 'Enrolled successfully'}, status=status.HTTP_201_CREATED)
+        
     except Class.DoesNotExist:
-        return Response({'detail': 'No open enrollment class found or invalid code'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'detail': 'Invalid class code or class not available for enrollment'}, status=status.HTTP_400_BAD_REQUEST)
 
 class ClassDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Class.objects.all()
@@ -241,14 +355,14 @@ class InviteUserView(generics.CreateAPIView):
     serializer_class = ClassMembershipSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
+    def perform_create(self, serializer):
         if self.request.user.role not in ['lecturer', 'admin']:
             raise PermissionDenied("Only lecturers and admin can invite users")
         class_id = serializer.validated_data['class_id']
-        if class_id.lecturer != self.request.user:
+        if class_id.lecturer != self.request.user and self.request.user.role != 'admin':
             raise PermissionDenied("You can only invite to your own classes")
         serializer.save()
-        print(f'invited {serializer.validated_data['user'].email} to {serializer.validated_data['class_id'].name} as {serializer.validated_data['role']}')
+        print(f'invited {serializer.validated_data["user"].email} to {serializer.validated_data["class_id"].name} as {serializer.validated_data["role"]}')
 
 # Manage attendance 
 class AttendanceView(generics.ListCreateAPIView):
@@ -296,7 +410,6 @@ class SystemAnnouncementView(generics.ListCreateAPIView):
             raise PermissionDenied("Only admin can create system announcements")
         serializer.save(posted_by=user, type="system", class_id=None)
 
-
 # ClassAnnouncementView
 class ClassAnnouncementView(generics.ListCreateAPIView):
     serializer_class = AnnouncementSerializer
@@ -318,47 +431,6 @@ class ClassAnnouncementView(generics.ListCreateAPIView):
             raise PermissionDenied("Only lecturers or admins can create class announcements")
         serializer.save(posted_by=user, type="class")
 
-class AdminCreateUserView(generics.CreateAPIView):
-    """Admin-only endpoint to create users with any role"""
-    queryset = User.objects.all()
-    serializer_class = AdminUserSerializer
-    permission_classes = [IsAuthenticated]
-    
-    def create(self, request, *args, **kwargs):
-        # Check if user is admin
-        if request.user.role != 'admin':
-            return Response({
-                'error': 'Permission denied',
-                'message': 'Only admins can create users'
-            }, status=status.HTTP_403_FORBIDDEN)
-        
-        try:
-            logger.info(f"Admin create user request data: {request.data}")
-            
-            serializer = self.get_serializer(data=request.data)
-            if serializer.is_valid():
-                user = serializer.save()
-                return Response({
-                    'message': 'User created successfully',
-                    'user': {
-                        'id': user.id,
-                        'username': user.username,
-                        'email': user.email,
-                        'role': user.role
-                    }
-                }, status=status.HTTP_201_CREATED)
-            else:
-                logger.error(f"Validation errors: {serializer.errors}")
-                return Response({
-                    'error': 'Validation failed',
-                    'details': serializer.errors
-                }, status=status.HTTP_400_BAD_REQUEST)
-                
-        except Exception as e:
-            logger.error(f"User creation error: {str(e)}")
-            return Response({
-                'error': 'User creation failed',
-                'message': str(e)
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 

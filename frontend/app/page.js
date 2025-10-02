@@ -54,23 +54,71 @@ export default function Home() {
       });
       
       if (response.status === 200) {
-        const user = response.data.user;
+        // FIX: SAFE ACCESS TO USER DATA
+        console.log('Login response:', response.data);
+        
+        // Get user data safely
+        const userData = response.data?.user;
+        if (!userData) {
+          console.error('No user data in response:', response.data);
+          setMessage('Login failed: Invalid response from server');
+          setLoading(false);
+          return;
+        }
+
+        const userRole = userData.role;
+        if (!userRole) {
+          console.error('No role in user data:', userData);
+          setMessage('Login failed: User role not found');
+          setLoading(false);
+          return;
+        }
+
+        console.log('User role:', userRole);
         setMessage('Login successful!');
         setShowSuccess(true);
         
+        // FIX: SAFE NAVIGATION BASED ON ROLE - DÒNG 62 Ở ĐÂY
         setTimeout(() => {
-          if (user.role === 'admin') {
-            router.push('/dashboard/admin');
-          } else if (user.role === 'lecturer') {
-            router.push('/dashboard/lecturer');
-          } else {
-            router.push('/dashboard/student');
+          switch (userRole) {
+            case 'admin':
+              console.log('Redirecting to admin dashboard');
+              router.push('/dashboard/admin');
+              break;
+            case 'lecturer':
+              console.log('Redirecting to lecturer dashboard');
+              router.push('/dashboard/lecturer');
+              break;
+            case 'student':
+              console.log('Redirecting to student dashboard');
+              router.push('/dashboard/student');
+              break;
+            default:
+              console.warn('Unknown role, redirecting to default dashboard:', userRole);
+              router.push('/dashboard/student');
+              break;
           }
         }, 1200);
       }
     } catch (error) {
       console.error('Login error:', error);
-      setMessage(error.response?.data?.error || error.response?.data?.detail || 'Login failed!');
+      
+      let errorMessage = 'Login failed!';
+      
+      if (error.response?.data) {
+        const errorData = error.response.data;
+        if (errorData.error) {
+          errorMessage = errorData.error;
+        } else if (errorData.detail) {
+          errorMessage = errorData.detail;
+        } else if (errorData.message) {
+          errorMessage = errorData.message;
+        }
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      setMessage(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -88,6 +136,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#0a0a0f] relative overflow-hidden p-4">
+      {/* Background effects */}
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute top-10 left-[-10%] w-[300px] h-[300px] bg-radial-gradient from-[#00ff88]/10 to-transparent rounded-full animate-float1"></div>
         <div className="absolute top-60 right-[-5%] w-[200px] h-[200px] bg-radial-gradient from-[#0099ff]/6 to-transparent rounded-full animate-float2"></div>
@@ -96,7 +145,7 @@ export default function Home() {
 
       <div className="relative z-10 w-full max-w-sm bg-[#151520] border border-[#2a2a35] rounded-xl p-8 shadow-2xl backdrop-blur-md font-georgia transition-all duration-300 hover:shadow-neon">
         <div className="flex justify-center mb-5">
-          <div className= "font-pacifico text-4xl bg-gradient-to-r from-[#00ff88] to-[#0099ff] bg-clip-text text-transparent drop-shadow-[0_0_15px_#00ff88] animate-pulse">
+          <div className="font-pacifico text-4xl bg-gradient-to-r from-[#00ff88] to-[#0099ff] bg-clip-text text-transparent drop-shadow-[0_0_15px_#00ff88] animate-pulse">
             OCS
           </div>
         </div>
@@ -122,6 +171,7 @@ export default function Home() {
               name="email"
               value={formData.email}
               onChange={handleChange}
+              autoComplete="email"
               className="w-full bg-[#1a1a25] border border-[#2a2a35] rounded-md px-3 py-2.5 text-white text-sm placeholder-transparent focus:border-[#00ff88] focus:bg-[#1a1a25]/80 focus:shadow-input-glow focus:outline-none transition-all duration-300 peer"
               placeholder="Email"
               required
@@ -138,6 +188,7 @@ export default function Home() {
               name="password"
               value={formData.password}
               onChange={handleChange}
+              autoComplete="current-password"
               className="w-full bg-[#1a1a25] border border-[#2a2a35] rounded-md px-3 py-2.5 pr-10 text-white text-sm placeholder-transparent focus:border-[#00ff88] focus:bg-[#1a1a25]/80 focus:shadow-input-glow focus:outline-none transition-all duration-300 peer"
               placeholder="Password"
               required
@@ -150,7 +201,7 @@ export default function Home() {
               onClick={handlePasswordToggle}
               className="absolute right-3 top-2.5 text-[#a0a0b0] hover:text-[#00ff88] transition-colors duration-200 text-lg"
             >
-              {showPassword ?'👁️':'🙈'}
+              {showPassword ? '👁️' : '🙈'}
             </button>
           </div>
 
@@ -198,7 +249,7 @@ export default function Home() {
           </div>
         </div>
       
-      <div className="text-center">
+        <div className="text-center">
           <button
             onClick={handleRegister}
             className="w-full bg-[#1a1a25] border border-[#2a2a35] rounded-md py-2.5 text-[#00ff88] font-medium text-sm hover:bg-[#2a2a35] hover:border-[#00ff88] hover:shadow-social-glow transition-all duration-300"
@@ -252,7 +303,7 @@ export default function Home() {
         }
         @keyframes pulse {
           from { filter: drop-shadow(0 0 20px rgba(0, 255, 136, 0.3)); }
-          to { filter: drop-shadow(0 0 30px rgba(0, 255, 136, 0.6)); }
+          to { filter: drop-shadow(0 0 30px rgba(0, 255, 136, 0.6)); }  
         }
         .animate-float1 { animation: float1 6s ease-in-out infinite; }
         .animate-float2 { animation: float2 8s ease-in-out infinite; }
@@ -261,8 +312,7 @@ export default function Home() {
         .peer-valid ~ label { @apply -top-5 left-2 scale-90 text-[#00ff88]; }
         .peer:focus ~ label { @apply -top-5 left-2 scale-90 text-[#00ff88]; }
         .peer:has-value ~ label { @apply -top-5 left-2 scale-90 text-[#00ff88]; }
-      `
-      }</style>
+      `}</style>
     </div>
   );
 }

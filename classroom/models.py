@@ -7,6 +7,7 @@ import re
 import random
 import string
 
+# Manage user
 def validate_username(value):
     if not re.match(r'^[a-zA-Z0-9_]+$', value):
         raise ValidationError("Username can only contain letters, numbers, and underscores.")
@@ -34,6 +35,26 @@ class User(AbstractUser):
     def clean(self):
         validate_password(self.password)
 
+class LoginHistory(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='login_histories')
+    login_time = models.DateTimeField(auto_now_add=True)
+    logout_time = models.DateTimeField(null=True, blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.user.username} - {self.login_time.strftime('%Y-%m-%d %H:%M:%S')}"
+
+    class Meta:
+        ordering = ['-login_time']
+        verbose_name = 'Login History'
+        verbose_name_plural = 'Login Histories'
+    
+    @property
+    def is_active(self):
+        return self.logout_time is None
+
+# Manage classes, sessions, and memberships
 class Class(models.Model):
     name = models.CharField(max_length=100, unique=True)
     description = models.TextField(blank=True)
@@ -96,6 +117,7 @@ class Attendance(models.Model):
     class Meta:
         unique_together = ('session', 'user')
 
+# Manage materials and announcements
 class Material(models.Model):
     class_id = models.ForeignKey(Class, on_delete=models.CASCADE, related_name='materials')
     title = models.CharField(max_length=100)

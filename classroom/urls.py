@@ -3,7 +3,7 @@ from .views import ( RegisterView, CustomLoginView, UserListCreateView, UserDeta
     get_user, LogoutView, CustomTokenRefreshView, ClassListCreateView,
     ClassDetailView, SessionListCreateView, SessionDetailView, InviteUserView,
     AttendanceView, MaterialView, SystemAnnouncementView, ClassAnnouncementView,
-    enroll_class, AdminCreateUserView
+    enroll_class, AdminCreateUserView, LoginHistoryView
 )
 from rest_framework.decorators import api_view
 
@@ -31,7 +31,8 @@ urlpatterns = [
     path('users/', UserListCreateView.as_view(), name='user-list'),
     path('users/<int:pk>/', UserDetailView.as_view(), name='user-detail'),
     path('admin/users/create/', AdminCreateUserView.as_view(), name='admin-create-user'), 
-    
+    path('login-history/', LoginHistoryView.as_view(), name='login-history'),
+
     # Class management
     path('classes/', ClassListCreateView.as_view(), name='class-list'),
     path('classes/<int:pk>/', ClassDetailView.as_view(), name='class-detail'),

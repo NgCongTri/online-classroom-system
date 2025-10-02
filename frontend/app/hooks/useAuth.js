@@ -38,7 +38,15 @@ export const useAuth = (options = {}) => {
 
         const res = await api.get('/user/', { withCredentials: true });
         console.log('User data fetched:', res.data);
-        setUser(res.data);
+        
+        // **VALIDATION: Check if user data is valid** ✅
+        if (res.data && typeof res.data === 'object' && res.data.role) {
+          setUser(res.data);
+        } else {
+          console.error('Invalid user data received:', res.data);
+          setUser(null);
+        }
+        
       } catch (err) {
         console.error('Auth check error:', err);
         if (err?.response?.status === 401) {
@@ -54,6 +62,7 @@ export const useAuth = (options = {}) => {
         setLoading(false);
       }
     };
+    
     checkAuth();
   }, []);
 
