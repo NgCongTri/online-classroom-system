@@ -6,6 +6,7 @@ from django.core.exceptions import ValidationError
 import re
 import random
 import string
+import uuid
 
 # Manage user
 def validate_username(value):
@@ -37,10 +38,13 @@ class User(AbstractUser):
 
 class LoginHistory(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='login_histories')
+    session_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)  
     login_time = models.DateTimeField(auto_now_add=True)
     logout_time = models.DateTimeField(null=True, blank=True)
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     user_agent = models.TextField(null=True, blank=True)
+    access_token = models.TextField(null=True, blank=True) 
+    refresh_token = models.TextField(null=True, blank=True)  
 
     def __str__(self):
         return f"{self.user.username} - {self.login_time.strftime('%Y-%m-%d %H:%M:%S')}"

@@ -82,7 +82,7 @@ export default function RegisterPage() {
       if (res.status === 201 || res.status === 200) {
         setShowSuccess(true);
         setMessage('Registration successful! Redirecting to login...');
-        setTimeout(() => router.push('/'), 1200);
+        setTimeout(() => router.push('/'), 3000);
       }
     } catch (err) {
       console.error('Registration error:', err);

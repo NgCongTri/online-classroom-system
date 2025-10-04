@@ -87,6 +87,7 @@ export default function AdminDashboard() {
         totalMaterials: 'Total Materials',
         students: 'Students',
         lecturers: 'Lecturers',
+        lecturer_name: 'Lecturer Name',
         admins: 'Admins',
         loginHistory: 'Login History',
         username: 'Username',
@@ -112,6 +113,7 @@ export default function AdminDashboard() {
         createAnnouncement: 'Create Announcement',
         index: '#',
         name: 'Name',
+        class_name: 'Class Name',
         classname: 'Class Name',
         email: 'Email',
         role: 'Role',
@@ -164,7 +166,16 @@ export default function AdminDashboard() {
         none: 'None',
         optional: 'Optional',
         required: 'Required',
+        openEnrollment: 'Open Enrollment',
+        openEnrollmentDescription: 'Students can join freely without class code',
+        codeRequiredDescription: 'Students need class code to join this class',
+        enrollmentType: 'Enrollment Type',
+        codeRequired: 'Enter code',
+        allowAll: 'Allow All',
+        enterClassCode: 'Enter class code',
+        classCodeHint: 'Students will use this code to join the class',
     },
+
     vi: {
         dashboard: 'Bảng Điều Khiển Quản Trị',
         welcome: 'Chào mừng trở lại',
@@ -182,6 +193,7 @@ export default function AdminDashboard() {
         totalMaterials: 'Tổng Tài Liệu',
         students: 'Học Sinh',
         lecturers: 'Giảng Viên',
+        lecturer_name: 'Tên Giảng Viên',
         admins: 'Quản Trị Viên',
         loginHistory: 'Lịch Sử Đăng Nhập',
         username: 'Tên Người Dùng',
@@ -253,12 +265,21 @@ export default function AdminDashboard() {
         errorOccurred: 'Đã xảy ra lỗi',
         failedToLoad: 'Không thể tải',
         student: 'Học Sinh',
+        class_name:'Tên Lớp',
         lecturer: 'Giảng Viên',
         admin: 'Quản Trị Viên',
         unknown: 'Không Xác Định',
         none: 'Không Có',
         optional: 'Tùy Chọn',
         required: 'Bắt Buộc',
+        openEnrollment: 'Mở Đăng Ký',
+        openEnrollmentDescription: 'Sinh viên có thể tham gia tự do không cần mã lớp',
+        codeRequiredDescription: 'Sinh viên cần mã lớp để tham gia lớp học này',
+        enrollmentType: 'Loại Đăng Ký',
+        codeRequired: 'Yêu Cầu Mã',
+        openToAll: 'Mở Cho Tất Cả',
+        enterClassCode: 'Nhập mã lớp học',
+        classCodeHint: 'Sinh viên sẽ sử dụng mã này để tham gia lớp',
     }
 };
 
@@ -275,7 +296,7 @@ export default function AdminDashboard() {
             
             if (!isAdmin) {
                 console.log('User is not admin, redirecting to /dashboard, role:', userRole);
-                router.push('/dashboard');
+                router.push('/');
                 return;
             }
             
@@ -672,10 +693,10 @@ export default function AdminDashboard() {
             <div className="bg-[#151520] border-b border-[#2a2a35] px-6 py-4">
                 <div className="flex justify-between items-center">
                     <div>
-                        <h1 className="text-2xl font-bold bg-gradient-to-r from-[#00ff88] to-[#0099ff] bg-clip-text text-transparent font-georgia">
+                        <h1 className="text-3xl font-bold bg-gradient-to-r from-[#00ff88] to-[#0099ff] bg-clip-text text-transparent font-georgia">
                             {t[language].logo_name}
                         </h1>
-                        <p className="text-white font-bold font-georgia">{t[language].dashboard}</p>
+                        <p className="text-white font-georgia">{t[language].dashboard}</p>
                     </div>
                     
                     <div className="flex items-center space-x-4">
@@ -722,7 +743,7 @@ export default function AdminDashboard() {
                                 <div className="absolute right-0 mt-2 w-48 bg-[#1a1a25] border border-[#2a2a35] rounded-lg shadow-lg z-50">
                                     <div className="py-2">
                                         <div className="px-4 py-2 border-b border-[#2a2a35]">
-                                            <p className="text-sm font-medium">{user?.email || 'admin@example.com'}</p>
+                                            <p className="text-sm font-medium">{user?.email}</p>
                                             <p className="text-xs text-[#a0a0b0] capitalize">{t[language].admin}</p>
                                         </div>
                                         <button
@@ -764,7 +785,7 @@ export default function AdminDashboard() {
 
             <div className="flex">
                 {/* Sidebar */}
-<div className={`${sidebarCollapsed ? 'w-18' : 'w-64'} bg-[#151520] border-r border-[#2a2a35] min-h-screen ${sidebarCollapsed ? 'px-2 py-6' : 'p-6'} transition-all duration-300 overflow-visible`}>
+<div className={`${sidebarCollapsed ? 'w-18' : 'w-54'} bg-[#151520] border-r border-[#2a2a35] min-h-screen ${sidebarCollapsed ? 'px-2 py-6' : 'p-6'} transition-all duration-300 overflow-visible`}>
                     {/* Toggle Button */}
                     <div className="mb-6">
                         <button
@@ -917,6 +938,7 @@ export default function AdminDashboard() {
                                                     <th className="px-6 py-4 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].username}</th>
                                                     <th className="px-6 py-4 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].email}</th>
                                                     <th className="px-6 py-4 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].role}</th>
+                                                    <th className="px-6 py-4 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].ipAddress}</th>
                                                     <th className="px-6 py-4 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].loginTime}</th>
                                                     <th className="px-6 py-4 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].logoutTime}</th>                    
                                                     <th className="px-6 py-4 text-center text-sm font-semibold text-[#a0a0b0]">{t[language].status}</th>
@@ -947,6 +969,7 @@ export default function AdminDashboard() {
                                                                 {history.user_role}
                                                             </span>
                                                         </td>
+                                                        <td className="px-6 py-4 text-sm text-[#a0a0b0]">{history.ip_address || t[language].unknown} ({getDeviceInfo(history.user_agent)})</td>
                                                         <td className="px-6 py-4 text-sm text-[#a0a0b0]">{formatDateTime(history.login_time)}</td>
                                                         <td className="px-6 py-4 text-sm text-[#a0a0b0]">{formatDateTime(history.logout_time)}</td>
                                                         <td className="px-6 py-4 text-center">
@@ -1069,7 +1092,11 @@ export default function AdminDashboard() {
                                     onClick={() => {
                                         setCreateType('class');
                                         setShowCreateModal(true);
-                                        setFormData({});
+                                        setFormData({
+                                            enrollment_type: 'open',
+                                            is_open_enrollment: true,
+                                            class_code: ''
+                                        });
                                         setIsEditing(false);
                                     }}
                                     className="px-4 py-2 bg-gradient-to-r from-[#00ff88] to-[#0099ff] text-[#0a0a0f] rounded-lg font-semibold hover:shadow-lg transition-all"
@@ -1084,11 +1111,12 @@ export default function AdminDashboard() {
                                     <thead className="bg-[#1a1a25] border-b border-[#2a2a35]">
                                         <tr>
                                             <th className="px-6 py-4 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].index}</th>
-                                            <th className="px-6 py-4 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].name}</th>
-                                            <th className="px-6 py-4 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].description}</th>
-                                            <th className="px-6 py-4 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].code}</th>
+                                            <th className="px-6 py-4 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].class_name}</th>
+                                            <th className="px-6 py-4 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].lecturer_name}</th>
                                             <th className="px-6 py-4 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].dates}</th>
                                             <th className="px-6 py-4 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].students}</th>
+                                            <th className="px-6 py-4 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].enrollmentType}</th>
+                                            <th className="px-6 py-4 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].code}</th>
                                             <th className="px-6 py-4 text-center text-sm font-semibold text-[#a0a0b0]">{t[language].actions}</th>
                                         </tr>
                                     </thead>
@@ -1097,10 +1125,20 @@ export default function AdminDashboard() {
                                             <tr key={cls.id} className="hover:bg-[#1a1a25] transition-colors">
                                                 <td className="px-6 py-4 text-sm">{index + 1}</td>
                                                 <td className="px-6 py-4 font-medium">{cls.name}</td>
-                                                <td className="px-6 py-4 text-sm text-[#a0a0b0] max-w-xs truncate">{cls.description || '-'}</td>
-                                                <td className="px-6 py-4 text-sm text-[#00ff88]">{cls.class_code || 'None'}</td>
+                                                <td className="px-6 py-4 text-sm ">{cls.lecturer || '-'}</td>                                                
                                                 <td className="px-6 py-4 text-sm text-[#a0a0b0]">{cls.start_date} - {cls.end_date}</td>
                                                 <td className="px-6 py-4 text-sm font-semibold text-[#00ff88]">{getClassStudentCount(cls.id)}</td>
+                                                <td className="px-6 py-4">
+                                                    <span className={`text-xs font-medium px-3 py-1 rounded-full ${
+                                                        cls.is_open_enrollment 
+                                                            ? 'bg-green-500/20 text-green-300' 
+                                                            : 'bg-orange-500/20 text-orange-300'
+                                                    }`}>
+                                                        <span className="w-2 h-2 rounded-full mr-2 inline-block bg-current"></span>
+                                                        {cls.is_open_enrollment ? t[language].allowAll : t[language].codeRequired}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-sm text-[#00ff88]">{cls.class_code || 'None'}</td>
                                                 <td className="px-6 py-4">
                                                     <div className="flex justify-center space-x-2">
                                                         <button 
@@ -1293,7 +1331,7 @@ export default function AdminDashboard() {
                                 </button>
                             </div>
 
-                            {/* Table */}
+                            {/* Announcement Table */}
                             <div className="bg-[#151520] border border-[#2a2a35] rounded-xl overflow-hidden">
                                 <table className="w-full">
                                     <thead className="bg-[#1a1a25] border-b border-[#2a2a35]">
@@ -1346,7 +1384,7 @@ export default function AdminDashboard() {
                 </div>
             </div>
 
-            {/* Create/Edit Modal */}
+            
             {showCreateModal && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
                     <div className="bg-[#151520] border border-[#2a2a35] rounded-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
@@ -1462,16 +1500,48 @@ export default function AdminDashboard() {
                                             onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
                                             required
                                         />
-                                    </div>
+                                    </div>                                    
+                                    
                                     <div>
-                                        <label className="block text-sm font-medium mb-2">{t[language].code} (Optional)</label>
-                                        <input
-                                            type="text"
+                                        <label className="block text-sm font-medium mb-2">{t[language].enrollmentType}</label>
+                                        <select
                                             className="w-full bg-[#1a1a25] border border-[#2a2a35] rounded-lg px-3 py-2 focus:border-[#00ff88] focus:outline-none"
-                                            value={formData.class_code || ''}
-                                            onChange={(e) => setFormData({ ...formData, class_code: e.target.value })}
-                                        />
+                                            value={formData.enrollment_type || 'open'}
+                                            onChange={(e) => {
+                                                const enrollmentType = e.target.value;
+                                                setFormData({ 
+                                                    ...formData, 
+                                                    enrollment_type: enrollmentType,
+                                                    is_open_enrollment: enrollmentType === 'open',
+                                                    class_code: enrollmentType === 'open' ? '' : formData.class_code
+                                                });
+                                            }}
+                                        >
+                                            <option value="open">{t[language].openToAll}</option>
+                                            <option value="code_required">{t[language].codeRequired}</option>
+                                        </select>
+                                        <p className="text-xs text-[#a0a0b0] mt-1">
+                                            {formData.enrollment_type === 'open' 
+                                                ? t[language].openEnrollmentDescription 
+                                                : t[language].codeRequiredDescription
+                                            }
+                                        </p>
                                     </div>
+                                    
+                                    {formData.enrollment_type === 'code_required' && (
+                                        <div>
+                                            <label className="block text-sm font-medium mb-2">{t[language].code} *</label>
+                                            <input
+                                                type="text"
+                                                className="w-full bg-[#1a1a25] border border-[#2a2a35] rounded-lg px-3 py-2 focus:border-[#00ff88] focus:outline-none"
+                                                value={formData.class_code || ''}
+                                                onChange={(e) => setFormData({ ...formData, class_code: e.target.value })}
+                                                placeholder={t[language].enterClassCode}
+                                                required
+                                            />
+                                            <p className="text-xs text-[#a0a0b0] mt-1">{t[language].classCodeHint}</p>
+                                        </div>
+                                    )}
                                 </>
                             )}
 

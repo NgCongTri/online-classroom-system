@@ -66,6 +66,29 @@ export default function Home() {
           return;
         }
 
+        // ✅ V2: Save to storage
+        // session_id → sessionStorage (ISOLATED per tab)
+        // access_token → sessionStorage (ISOLATED per tab)
+        // refresh_token → httpOnly cookie (auto managed by browser)
+        const accessToken = response.data.access;
+        const sessionId = response.data.session_id;
+        
+        if (accessToken && sessionId) {
+          // ✅ Use sessionStorage instead of localStorage
+          // sessionStorage is ISOLATED per tab → No conflict!
+          sessionStorage.setItem('access_token', accessToken);
+          sessionStorage.setItem('session_id', sessionId);
+          
+          console.log('✅ Tokens saved to sessionStorage (isolated per tab)');
+          console.log('✅ Session ID:', sessionId);
+          console.log('✅ Refresh token in cookie: refresh_token_' + sessionId);
+        } else {
+          console.error('Missing tokens in response');
+          setMessage('Login failed: Invalid authentication tokens');
+          setLoading(false);
+          return;
+        }
+
         const userRole = userData.role;
         if (!userRole) {
           console.error('No role in user data:', userData);

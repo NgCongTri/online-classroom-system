@@ -32,20 +32,29 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
+# ✅ Custom User Model - MUST be defined BEFORE INSTALLED_APPS
+AUTH_USER_MODEL = 'classroom.User'
+
 
 # Application definition
 
 INSTALLED_APPS = [
+    # ✅ CRITICAL: Load classroom BEFORE django.contrib.auth
+    'classroom.apps.ClassroomConfig',  # Explicit config
+    
+    # Django built-in apps
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    
+    # Third-party apps
     'corsheaders',
     'rest_framework',
     'rest_framework_simplejwt',
-    'classroom',
+    'rest_framework_simplejwt.token_blacklist',
 ]
 
 
@@ -142,14 +151,11 @@ CORS_ALLOWED_ORIGINS = [
 ]
 
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_METHODS = ['GET', 'POST', 'OPTIONS', 'PUT', 'DELETE']
-CORS_ALLOW_HEADERS = ['Content-Type', 'Authorization', '*']
+CORS_ALLOW_METHODS = ['GET', 'POST', 'OPTIONS', 'PUT', 'DELETE', 'PATCH']
+CORS_ALLOW_HEADERS = ['Content-Type', 'Authorization', 'X-Session-ID']  # ✅ Add X-Session-ID
 
 
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-    ),
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'classroom.authentication.CookieJWTAuthentication',
     ),
@@ -158,15 +164,36 @@ REST_FRAMEWORK = {
     ],
 }
 
+# ✅ HYBRID JWT CONFIGURATION (Like Google/Facebook)
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30), 
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),   
-    'AUTH_COOKIE': 'access_token',
-    'AUTH_COOKIE_REFRESH': 'refresh_token',
-    'AUTH_COOKIE_HTTP_ONLY': True,
-    'AUTH_COOKIE_SECURE': False,
-    'AUTH_COOKIE_SAMESITE': 'Lax',
-    'AUTH_COOKIE_USE': True,
+    # Token Lifetimes
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=45),  # ✅ 45 phút cho session học
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),     # ✅ 1 ngày
+    
+    # Token Rotation (Security best practice)
+    'ROTATE_REFRESH_TOKENS': True,      # ✅ Tạo refresh token mới mỗi lần refresh
+    'BLACKLIST_AFTER_ROTATION': True,   # ✅ Blacklist token cũ
+    'UPDATE_LAST_LOGIN': False,
+
+    # Algorithm & Keys
+    'ALGORITHM': 'HS256',
+    'SIGNING_KEY': SECRET_KEY,
+    'VERIFYING_KEY': None,
+    'AUDIENCE': None,
+    'ISSUER': None,
+
+    # Auth Headers
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',
+    'USER_ID_FIELD': 'id',
+    'USER_ID_CLAIM': 'user_id',
+
+    # Token Classes
+    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
+    'TOKEN_TYPE_CLAIM': 'token_type',
+    
+    # Claims
+    'JTI_CLAIM': 'jti',
 }
-AUTH_USER_MODEL = 'classroom.User'
-AUTH_COOKIE_USE: True
+
+# Note: AUTH_USER_MODEL moved to top of file (before INSTALLED_APPS)

@@ -99,9 +99,16 @@ class AdminCreateUserView(generics.CreateAPIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class CustomLoginView(TokenObtainPairView):
+    """
+    Hybrid Login (Like Google/Facebook):
+    - Access Token → Response JSON (Frontend stores in localStorage)
+    - Refresh Token → httpOnly Cookie (Secure, not accessible by JavaScript)
+    - Session ID → Response JSON (Frontend stores in localStorage)
+    """
+    
     def post(self, request, *args, **kwargs):
         try:
-            # Get the tokens first
+            # ✅ Get JWT tokens from parent class
             response = super().post(request, *args, **kwargs)
             
             if response.status_code == 200:
@@ -109,50 +116,55 @@ class CustomLoginView(TokenObtainPairView):
                 try:
                     user = User.objects.get(email=email)
                     
-                    # Get client info
-                    ip_address = request.META.get('REMOTE_ADDR', '127.0.0.1')
-                    user_agent = request.META.get('HTTP_USER_AGENT', '')
-                    
-                    # Create login history
-                    LoginHistory.objects.create(
-                        user=user,
-                        ip_address=ip_address,
-                        user_agent=user_agent            
-                    )
-                    
-                    # **FIX: ADD USER DATA TO RESPONSE** ✅
-                    response.data['user'] = {
-                        'id': user.id,
-                        'username': user.username,
-                        'email': user.email,
-                        'role': user.role
-                    }
-                    
-                    print(f"Login successful for user: {user.username}, role: {user.role}")  # Debug log
-                    
-                    # Set cookies
+                    # Get tokens
                     access_token = response.data.get('access')
                     refresh_token = response.data.get('refresh')
                     
-                    if access_token:
-                        response.set_cookie(
-                            key='access_token',
-                            value=access_token,
-                            httponly=True,
-                            secure=False,  # Set to True in production with HTTPS
-                            samesite='Lax',
-                            max_age=3600  # 1 hour
-                        )
+                    if not access_token or not refresh_token:
+                        return Response({
+                            'error': 'Token generation failed',
+                            'message': 'Failed to generate authentication tokens'
+                        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
                     
-                    if refresh_token:
-                        response.set_cookie(
-                            key='refresh_token',
-                            value=refresh_token,
-                            httponly=True,
-                            secure=False,  # Set to True in production with HTTPS
-                            samesite='Lax',
-                            max_age=86400  # 24 hours
-                        )
+                    # ✅ Create new session
+                    ip_address = request.META.get('REMOTE_ADDR', '127.0.0.1')
+                    login_history = LoginHistory.objects.create(
+                        user=user,
+                        ip_address=ip_address,
+                        user_agent=request.META.get('HTTP_USER_AGENT', ''),
+                        access_token=access_token,   # Store for tracking
+                        refresh_token=refresh_token  # Store for validation
+                    )
+                    
+                    session_id = str(login_history.session_id)
+                    
+                    logger.info(f"User {user.username} ({user.role}) logged in. Session: {session_id}")
+                    
+                    # ✅ Response với access_token và session_id (Frontend lưu localStorage)
+                    response.data = {
+                        'access': access_token,
+                        'session_id': session_id,
+                        'user': {
+                            'id': user.id,
+                            'username': user.username,
+                            'email': user.email,
+                            'role': user.role,
+                        },
+                        'expires_in': 45 * 60  # 45 minutes in seconds
+                    }
+                    
+                    # ✅ V2: Set refresh_token với session_id prefix (UNIQUE per session)
+                    # Mỗi session có cookie riêng → Không conflict giữa các user
+                    response.set_cookie(
+                        key=f'refresh_token_{session_id}',  # ✅ UNIQUE KEY
+                        value=refresh_token,
+                        httponly=True,   # JavaScript KHÔNG thể đọc (bảo mật cao)
+                        secure=False,    # Set True in production (HTTPS only)
+                        samesite='Lax',  # CSRF protection
+                        max_age=60 * 60 * 24  # 1 day
+                    )
+                    
+                    logger.info(f"✅ Set cookie: refresh_token_{session_id}")
                     
                 except User.DoesNotExist:
                     return Response({
@@ -168,6 +180,100 @@ class CustomLoginView(TokenObtainPairView):
                 'error': 'Login failed',
                 'message': 'An error occurred during login',
                 'details': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+# ✅ V2: Token Refresh View
+class CustomTokenRefreshView(generics.GenericAPIView):
+    """
+    V2: Refresh Access Token using:
+    - Refresh Token from httpOnly cookie: refresh_token_{session_id}
+    - Session ID from request header/body
+    
+    Advantages:
+    - Mỗi session có cookie riêng (không conflict)
+    - Vẫn dùng httpOnly (bảo mật cao)
+    - Browser tự động gửi cookie
+    """
+    permission_classes = []  # No authentication required for refresh
+    
+    def post(self, request):
+        try:
+            # ✅ Get session_id from header or body
+            session_id = request.headers.get('X-Session-ID') or request.data.get('session_id')
+            
+            if not session_id:
+                return Response({
+                    'error': 'No session ID',
+                    'message': 'Session ID is required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # ✅ V2: Get refresh_token from cookie with session_id prefix
+            cookie_key = f'refresh_token_{session_id}'
+            refresh_token = request.COOKIES.get(cookie_key)
+            
+            # 🔍 DEBUG: Log all cookies
+            logger.info(f"🔍 Looking for cookie: {cookie_key}")
+            logger.info(f"🔍 Available cookies: {list(request.COOKIES.keys())}")
+            logger.info(f"🔍 Found refresh_token: {'Yes' if refresh_token else 'No'}")
+            
+            if not refresh_token:
+                logger.warning(f"❌ No cookie found: {cookie_key}")
+                logger.warning(f"Available cookies: {list(request.COOKIES.keys())}")
+                return Response({
+                    'error': 'No refresh token',
+                    'message': 'Refresh token not found. Please login again.'
+                }, status=status.HTTP_401_UNAUTHORIZED)
+            
+            # ✅ Validate session is still active
+            try:
+                login_history = LoginHistory.objects.select_related('user').get(
+                    session_id=session_id,
+                    logout_time__isnull=True
+                )
+            except LoginHistory.DoesNotExist:
+                return Response({
+                    'error': 'Invalid session',
+                    'message': 'Session not found or has been logged out'
+                }, status=status.HTTP_401_UNAUTHORIZED)
+            
+            # ✅ Validate refresh_token matches session
+            if login_history.refresh_token != refresh_token:
+                return Response({
+                    'error': 'Token mismatch',
+                    'message': 'Refresh token does not match session'
+                }, status=status.HTTP_401_UNAUTHORIZED)
+            
+            # ✅ Generate new access token
+            from rest_framework_simplejwt.tokens import RefreshToken
+            
+            try:
+                refresh = RefreshToken(refresh_token)
+                new_access_token = str(refresh.access_token)
+                
+                # ✅ Update access_token in database
+                login_history.access_token = new_access_token
+                login_history.save(update_fields=['access_token'])
+                
+                logger.info(f"Token refreshed for session {session_id}, user: {login_history.user.username}")
+                
+                # ✅ Return new access_token
+                return Response({
+                    'access': new_access_token,
+                    'expires_in': 45 * 60  # 45 minutes
+                }, status=status.HTTP_200_OK)
+                
+            except Exception as token_error:
+                logger.error(f"Token refresh error: {str(token_error)}")
+                return Response({
+                    'error': 'Invalid token',
+                    'message': 'Refresh token is invalid or expired. Please login again.'
+                }, status=status.HTTP_401_UNAUTHORIZED)
+            
+        except Exception as e:
+            logger.error(f"Token refresh error: {str(e)}")
+            return Response({
+                'error': 'Refresh failed',
+                'message': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class UserListCreateView(generics.ListCreateAPIView):
@@ -195,7 +301,7 @@ class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
 @permission_classes([IsAuthenticated])
 def get_user(request):
     user = request.user
-    print(f"get_user called - User: {user.username}, Role: {user.role}")  # Debug log
+    print(f"get_user called - User: {user.username}, Role: {user.role}")  
     
     return Response({
         'id': user.id,
@@ -205,26 +311,56 @@ def get_user(request):
     })
 
 class LogoutView(generics.GenericAPIView):
+    """
+    Logout specific session:
+    - Blacklist refresh token
+    - Mark session as logged out
+    - Clear refresh_token cookie
+    """
     permission_classes = [IsAuthenticated]
     
     def post(self, request):
         try:
-            # Update login history - chỉ cần set logout_time
-            login_history = LoginHistory.objects.filter(
-                user=request.user,
-                logout_time__isnull=True  # Tìm session đang active
-            ).order_by('-login_time').first()
+            # ✅ Get session_id from header or body
+            session_id = request.headers.get('X-Session-ID') or request.data.get('session_id')
             
-            if login_history:
-                login_history.logout_time = timezone.now()
-                login_history.save()
+            if session_id:
+                # ✅ Find and logout session
+                login_history = LoginHistory.objects.filter(
+                    session_id=session_id,
+                    user=request.user,
+                    logout_time__isnull=True
+                ).first()
+                
+                if login_history:
+                    # ✅ Blacklist refresh token
+                    try:
+                        from rest_framework_simplejwt.tokens import RefreshToken
+                        from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
+                        
+                        if login_history.refresh_token:
+                            refresh = RefreshToken(login_history.refresh_token)
+                            refresh.blacklist()
+                            logger.info(f"Refresh token blacklisted for session {session_id}")
+                    except Exception as blacklist_error:
+                        logger.warning(f"Failed to blacklist token: {str(blacklist_error)}")
+                    
+                    # ✅ Mark session as logged out
+                    login_history.logout_time = timezone.now()
+                    login_history.access_token = None   # Clear tokens
+                    login_history.refresh_token = None
+                    login_history.save()
+                    
+                    logger.info(f"Session {session_id} logged out for user {request.user.username}")
             
+            # ✅ V2: Clear refresh_token_{session_id} cookie
             response = Response({
                 'message': 'Logged out successfully'
             }, status=status.HTTP_200_OK)
             
-            response.delete_cookie('access_token')
-            response.delete_cookie('refresh_token')
+            if session_id:
+                response.delete_cookie(f'refresh_token_{session_id}')
+                logger.info(f"✅ Deleted cookie: refresh_token_{session_id}")
             
             return response
             

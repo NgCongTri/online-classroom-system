@@ -211,11 +211,12 @@ class LoginHistorySerializer(serializers.ModelSerializer):
     email = serializers.CharField(source='user.email', read_only=True)
     user_role = serializers.CharField(source='user.role', read_only=True)
     is_active = serializers.SerializerMethodField()
+    session_id = serializers.UUIDField(read_only=True)  # ✅ Add session_id
 
     class Meta:
         model = LoginHistory
         fields = ['id', 'user', 'username', 'email', 'user_role', 'login_time', 
-                  'logout_time', 'ip_address', 'user_agent', 'is_active']
+                  'logout_time', 'ip_address', 'user_agent', 'is_active', 'session_id']
     
     def get_is_active(self, obj):        
         return obj.logout_time is None
@@ -225,7 +226,7 @@ class ClassSerializer(serializers.ModelSerializer):
     lecturer = serializers.StringRelatedField(read_only=True)
     class Meta:
         model = Class
-        fields = ['id', 'name', 'description', 'start_date', 'end_date', 'lecturer', 'created_at', 'class_code']
+        fields = ['id', 'name', 'description', 'start_date', 'end_date', 'lecturer', 'created_at', 'class_code', 'is_open_enrollment']
         read_only_fields = ['created_at']
     
     def validate(self, data):
