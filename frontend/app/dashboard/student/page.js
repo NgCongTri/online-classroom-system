@@ -8,8 +8,11 @@ export default function StudentDashboard() {
     const router = useRouter();
     const { user, loading, logout } = useAuth();
     
-    const [classes, setClasses] = useState([]);
-    const [showJoinModal, setShowJoinModal] = useState(false);
+    const [enrolledClasses, setEnrolledClasses] = useState([]);
+    const [availableClasses, setAvailableClasses] = useState([]);
+    const [activeTab, setActiveTab] = useState('enrolled'); // 'enrolled' or 'available'
+    const [showCodeModal, setShowCodeModal] = useState(false);
+    const [selectedClass, setSelectedClass] = useState(null);
     const [showDropdown, setShowDropdown] = useState(false);
     const [language, setLanguage] = useState('en');
     const [message, setMessage] = useState('');
@@ -21,11 +24,14 @@ export default function StudentDashboard() {
         en: {
             logo_name: 'OCS',
             myClasses: 'My Classes',
-            joinClass: 'Join Class',
+            availableClasses: 'Available Classes',
+            enrolledClasses: 'Enrolled Classes',
             noClasses: 'No classes yet',
+            noAvailableClasses: 'No available classes',
             startLearning: 'Start learning by joining a class',
-            viewClass: 'View Class',
-            enterClassCode: 'Enter class code',
+            enrollMe: 'Enroll Me',
+            enterCode: 'Enter Code',
+            enterClassCode: 'Enter class code to join',
             join: 'Join',
             cancel: 'Cancel',
             logout: 'Logout',
@@ -33,15 +39,21 @@ export default function StudentDashboard() {
             gridView: 'Grid View',
             listView: 'List View',
             lecturer: 'Lecturer',
+            openEnrollment: 'Open Enrollment',
+            codeRequired: 'Code Required',
+            alreadyEnrolled: 'Already Enrolled',
         },
         vi: {
             logo_name: 'OCS',
             myClasses: 'Lớp Của Tôi',
-            joinClass: 'Tham Gia Lớp',
+            availableClasses: 'Lớp Có Sẵn',
+            enrolledClasses: 'Lớp Đã Tham Gia',
             noClasses: 'Chưa tham gia lớp nào',
+            noAvailableClasses: 'Không có lớp nào',
             startLearning: 'Bắt đầu học bằng cách tham gia lớp',
-            viewClass: 'Xem Lớp',
-            enterClassCode: 'Nhập mã lớp học',
+            enrollMe: 'Ghi Danh Tôi',
+            enterCode: 'Nhập Mã',
+            enterClassCode: 'Nhập mã lớp để tham gia',
             join: 'Tham Gia',
             cancel: 'Hủy',
             logout: 'Đăng Xuất',
@@ -49,6 +61,9 @@ export default function StudentDashboard() {
             gridView: 'Dạng Lưới',
             listView: 'Dạng Danh Sách',
             lecturer: 'Giảng viên',
+            openEnrollment: 'Mở Tự Do',
+            codeRequired: 'Yêu Cầu Mã',
+            alreadyEnrolled: 'Đã Tham Gia',
         }
     };
 
@@ -60,91 +75,200 @@ export default function StudentDashboard() {
 
     useEffect(() => {
         if (user?.role === 'student') {
-            fetchClasses();
+            fetchEnrolledClasses();
+            fetchAvailableClasses();
         }
     }, [user]);
 
-    const fetchClasses = async () => {
+    const fetchEnrolledClasses = async () => {
         try {
-            // Get classes where student is enrolled
             const res = await api.get('/class-memberships/');
-            const enrolledClasses = res.data
-                .filter(membership => membership.student === user.id)
-                .map(membership => membership.class_data);
-            setClasses(enrolledClasses);
+            const myClasses = res.data
+                .filter(membership => membership.user === user.id)
+                .map(membership => ({
+                    ...membership.class_id,
+                    membership_id: membership.id
+                }));
+            setEnrolledClasses(myClasses);
         } catch (error) {
-            console.error('Error fetching classes:', error);
+            console.error('Error fetching enrolled classes:', error);
         }
     };
 
-    const handleJoinClass = async (e) => {
+    const fetchAvailableClasses = async () => {
+        try {
+            const res = await api.get('/classes/available/');
+            setAvailableClasses(res.data);
+        } catch (error) {
+            console.error('Error fetching available classes:', error);
+        }
+    };
+
+    const handleJoinOpenClass = async (classId) => {
+        try {
+            await api.post(`/classes/${classId}/join/`);
+            setMessage('✅ Successfully enrolled in class!');
+            await fetchEnrolledClasses();
+            await fetchAvailableClasses();
+            setActiveTab('enrolled'); // Switch to enrolled tab
+        } catch (error) {
+            setMessage('❌ ' + (error.response?.data?.detail || 'Error enrolling in class'));
+        }
+    };
+
+    const handleJoinWithCode = async (e) => {
         e.preventDefault();
         try {
-            // TODO: Implement join class API
-            await api.post('/class-memberships/', {
-                class_code: joinCode,
-                student: user.id
+            await api.post('/classes/join-with-code/', {
+                class_code: joinCode
             });
-            setMessage('Joined class successfully!');
-            setShowJoinModal(false);
+            setMessage('✅ Successfully joined class!');
+            setShowCodeModal(false);
+            setSelectedClass(null);
             setJoinCode('');
-            fetchClasses();
+            await fetchEnrolledClasses();
+            await fetchAvailableClasses();
+            setActiveTab('enrolled'); 
         } catch (error) {
-            setMessage(error.response?.data?.detail || 'Error joining class');
+            setMessage('❌ ' + (error.response?.data?.detail || 'Error joining class'));
         }
     };
 
     const getClassCoverColor = (index) => {
         const colors = [
-            'from-blue-500 to-blue-600',
-            'from-green-500 to-green-600',
-            'from-purple-500 to-purple-600',
-            'from-orange-500 to-orange-600',
-            'from-pink-500 to-pink-600',
-            'from-indigo-500 to-indigo-600',
+            'from-blue-600 to-blue-700',
+            'from-green-600 to-green-700',
+            'from-purple-600 to-purple-700',
+            'from-orange-600 to-orange-700',
+            'from-pink-600 to-pink-700',
+            'from-indigo-600 to-indigo-700',
         ];
         return colors[index % colors.length];
     };
 
+    const ClassCard = ({ cls, index, isEnrolled }) => {
+        const gradientColor = getClassCoverColor(index);
+        const borderColor = gradientColor.includes('blue') ? 'border-blue-200' :
+                           gradientColor.includes('green') ? 'border-green-200' :
+                           gradientColor.includes('purple') ? 'border-purple-200' :
+                           gradientColor.includes('orange') ? 'border-orange-200' :
+                           gradientColor.includes('pink') ? 'border-pink-200' :
+                           'border-indigo-200';
+        
+        return (
+            <div className={`bg-white rounded-xl border-2 ${borderColor} overflow-hidden hover:shadow-xl transition-all ${isEnrolled ? 'cursor-pointer hover:-translate-y-1' : ''}`}>
+                {/* Class Cover */}
+                <div 
+                    className={`h-24 bg-gradient-to-r ${gradientColor} p-4 relative ${isEnrolled ? 'cursor-pointer' : ''}`}
+                    onClick={() => isEnrolled && router.push(`/dashboard/class/${cls.id}`)}
+                >
+                    <h3 className="text-white text-lg font-semibold truncate mb-1">{cls.name}</h3>
+                    <p className="text-white/90 text-xs truncate">
+                        {t[language].lecturer}: {cls.lecturer_name || 'Unknown'}
+                    </p>
+                </div>
+
+                {/* Class Info */}
+                <div className="p-4">
+                    <p className="text-gray-600 text-sm mb-3 line-clamp-2 leading-relaxed min-h-[2.5rem]">
+                        {cls.description || 'No description'}
+                    </p>
+                    
+                    <div className="flex items-center justify-between text-xs text-gray-500 border-t border-gray-100 pt-3 mb-3">
+                        <span className="truncate">{cls.start_date}</span>
+                        <span className="mx-1">-</span>
+                        <span className="truncate">{cls.end_date}</span>
+                    </div>
+
+                    {/* Action Buttons */}
+                    {!isEnrolled && (
+                        <div className="mt-3">
+                            {cls.is_open_enrollment ? (
+                                <button
+                                    onClick={() => handleJoinOpenClass(cls.id)}
+                                    className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all font-medium text-sm"
+                                >
+                                    {t[language].enrollMe}
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={() => {
+                                        setSelectedClass(cls);
+                                        setShowCodeModal(true);
+                                    }}
+                                    className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all font-medium text-sm"
+                                >
+                                    {t[language].enterCode}
+                                </button>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Enrollment Status Badge */}
+                    <div className="mt-3">
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                            isEnrolled
+                                ? 'bg-purple-100 text-purple-700'
+                                : cls.is_open_enrollment
+                                    ? 'bg-green-100 text-green-700'
+                                    : 'bg-blue-100 text-blue-700'
+                        }`}>
+                            {isEnrolled 
+                                ? t[language].alreadyEnrolled 
+                                : cls.is_open_enrollment 
+                                    ? t[language].openEnrollment 
+                                    : t[language].codeRequired
+                            }
+                        </span>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
     if (loading) {
         return (
-            <div className="min-h-screen bg-white flex items-center justify-center">
-                <div className="text-gray-600">{t[language].loading}</div>
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+                <div className="text-gray-600 text-lg">{t[language].loading}</div>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-white">
+        <div className="min-h-screen bg-gray-50">
             {/* Header */}
-            <div className="bg-[#151520] border-b border-[#2a2a35] px-6 py-4">
-                <div className="flex justify-between items-center">
-                    <div>
-                        <h1 className="text-3xl font-bold bg-gradient-to-r from-[#00ff88] to-[#0099ff] bg-clip-text text-transparent font-georgia">
-                            {t[language].logo_name}
+            <div className="bg-white border-b border-gray-200 px-6 py-4 shadow-sm">
+                <div className="flex justify-between items-center max-w-7xl mx-auto">
+                    <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+                            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                            </svg>
+                        </div>
+                        <h1 className="text-xl font-semibold text-gray-800">
+                            {t[language].myClasses}
                         </h1>
-                        <p className="text-white font-georgia">{t[language].myClasses}</p>
                     </div>
                     
                     <div className="flex items-center space-x-4">
                         {/* Language Switcher */}
-                        <div className="flex bg-[#1a1a25] border border-[#2a2a35] rounded-lg p-1">
+                        <div className="flex bg-gray-100 rounded-lg p-1">
                             <button
                                 onClick={() => setLanguage('en')}
-                                className={`px-2 py-0.5 rounded text-xs font-medium transition-all ${
+                                className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${
                                     language === 'en' 
-                                        ? 'bg-[#0099ff] text-white' 
-                                        : 'text-[#a0a0b0] hover:text-white'
+                                        ? 'bg-white text-blue-600 shadow-sm' 
+                                        : 'text-gray-600 hover:text-gray-900'
                                 }`}
                             >
                                 EN
                             </button>
                             <button
                                 onClick={() => setLanguage('vi')}
-                                className={`px-2 py-0.5 rounded text-xs font-medium transition-all ${
+                                className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${
                                     language === 'vi' 
-                                        ? 'bg-[#0099ff] text-white' 
-                                        : 'text-[#a0a0b0] hover:text-white'
+                                        ? 'bg-white text-blue-600 shadow-sm' 
+                                        : 'text-gray-600 hover:text-gray-900'
                                 }`}
                             >
                                 VI
@@ -155,30 +279,30 @@ export default function StudentDashboard() {
                         <div className="relative">
                             <button
                                 onClick={() => setShowDropdown(!showDropdown)}
-                                className="flex items-center space-x-3 px-4 py-2 bg-[#1a1a25] border border-[#2a2a35] rounded-lg hover:border-[#0099ff]/30 transition-all"
+                                className="flex items-center space-x-2 px-3 py-2 hover:bg-gray-100 rounded-lg transition-all"
                             >
-                                <div className="w-8 h-8 bg-gradient-to-r from-[#0099ff] to-[#00ff88] rounded-full flex items-center justify-center font-semibold text-white">
+                                <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center font-semibold text-white text-sm">
                                     {user?.username?.charAt(0).toUpperCase() || 'S'}
                                 </div>
-                                <span className="text-sm font-medium text-white">{user?.username || 'Student'}</span>
-                                <svg className={`w-4 h-4 transition-transform text-white ${showDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <span className="text-sm font-medium text-gray-700">{user?.username || 'Student'}</span>
+                                <svg className={`w-4 h-4 text-gray-600 transition-transform ${showDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
                                 </svg>
                             </button>
                             
                             {showDropdown && (
-                                <div className="absolute right-0 mt-2 w-48 bg-[#1a1a25] border border-[#2a2a35] rounded-lg shadow-lg z-50">
+                                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
                                     <div className="py-2">
-                                        <div className="px-4 py-2 border-b border-[#2a2a35]">
-                                            <p className="text-sm font-medium text-white">{user?.email}</p>
-                                            <p className="text-xs text-[#a0a0b0]">Student</p>
+                                        <div className="px-4 py-3 border-b border-gray-100">
+                                            <p className="text-sm font-medium text-gray-900">{user?.email}</p>
+                                            <p className="text-xs text-gray-500 mt-1">Student</p>
                                         </div>
                                         <button
                                             onClick={() => {
                                                 setShowDropdown(false);
                                                 logout();
                                             }}
-                                            className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-[#2a2a35] transition-colors"
+                                            className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
                                         >
                                             {t[language].logout}
                                         </button>
@@ -192,141 +316,153 @@ export default function StudentDashboard() {
 
             {/* Message notification */}
             {message && (
-                <div className={`mx-6 mt-4 p-4 rounded-lg ${
-                    message.toLowerCase().includes('error') || message.toLowerCase().includes('failed')
-                        ? 'bg-red-500/10 text-red-400 border border-red-500/20' 
-                        : 'bg-green-500/10 text-green-400 border border-green-500/20'
-                }`}>
-                    <div className="flex items-center justify-between">
-                        <span>{message}</span>
-                        <button onClick={() => setMessage('')} className="text-xl hover:text-white transition-colors">&times;</button>
+                <div className="max-w-7xl mx-auto px-6 mt-4">
+                    <div className={`p-4 rounded-lg ${
+                        message.includes('❌')
+                            ? 'bg-red-50 text-red-700 border border-red-200' 
+                            : 'bg-green-50 text-green-700 border border-green-200'
+                    }`}>
+                        <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium">{message}</span>
+                            <button onClick={() => setMessage('')} className="text-xl hover:opacity-70 transition-opacity">&times;</button>
+                        </div>
                     </div>
                 </div>
             )}
 
-            {/* Main Content */}
-            <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                {/* Message */}
-                {message && (
-                    <div className={`mb-6 p-4 rounded-lg ${
-                        message.includes('Error') || message.includes('error')
-                            ? 'bg-red-50 text-red-600 border border-red-200'
-                            : 'bg-green-50 text-green-600 border border-green-200'
-                    }`}>
-                        <div className="flex items-center justify-between">
-                            <span>{message}</span>
-                            <button onClick={() => setMessage('')} className="text-xl">&times;</button>
+            {/* Tabs and View Toggle */}
+            <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+                <div className="max-w-7xl mx-auto px-6">
+                    <div className="flex justify-between items-center">
+                        <div className="flex space-x-8">
+                            <button
+                                onClick={() => setActiveTab('enrolled')}
+                                className={`py-4 px-2 border-b-2 font-medium text-sm transition-colors ${
+                                    activeTab === 'enrolled'
+                                        ? 'border-blue-600 text-blue-600'
+                                        : 'border-transparent text-gray-500 hover:text-gray-700'
+                                }`}
+                            >
+                                {t[language].enrolledClasses} ({enrolledClasses.length})
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('available')}
+                                className={`py-4 px-2 border-b-2 font-medium text-sm transition-colors ${
+                                    activeTab === 'available'
+                                        ? 'border-blue-600 text-blue-600'
+                                        : 'border-transparent text-gray-500 hover:text-gray-700'
+                                }`}
+                            >
+                                {t[language].availableClasses} ({availableClasses.length})
+                            </button>
+                        </div>
+
+                        {/* View Toggle */}
+                        <div className="flex bg-gray-100 rounded-lg p-1">
+                            <button
+                                onClick={() => setViewMode('grid')}
+                                className={`p-2 rounded-md transition-all ${
+                                    viewMode === 'grid'
+                                        ? 'bg-white text-blue-600 shadow-sm'
+                                        : 'text-gray-500 hover:text-gray-700'
+                                }`}
+                                title={t[language].gridView}
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                                </svg>
+                            </button>
+                            <button
+                                onClick={() => setViewMode('list')}
+                                className={`p-2 rounded-md transition-all ${
+                                    viewMode === 'list'
+                                        ? 'bg-white text-blue-600 shadow-sm'
+                                        : 'text-gray-500 hover:text-gray-700'
+                                }`}
+                                title={t[language].listView}
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
+                                </svg>
+                            </button>
                         </div>
                     </div>
+                </div>
+            </div>
+
+            {/* Main Content */}
+            <main className="max-w-7xl mx-auto px-6 py-8">
+                {/* Enrolled Classes Tab */}
+                {activeTab === 'enrolled' && (
+                    <>
+                        {enrolledClasses.length === 0 ? (
+                            <div className="text-center py-20">
+                                <div className="w-24 h-24 mx-auto mb-6 bg-gray-100 rounded-full flex items-center justify-center">
+                                    <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                                    </svg>
+                                </div>
+                                <h3 className="text-xl font-semibold text-gray-900 mb-2">{t[language].noClasses}</h3>
+                                <p className="text-gray-600">{t[language].startLearning}</p>
+                            </div>
+                        ) : (
+                            <div className={viewMode === 'grid' 
+                                ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5'
+                                : 'space-y-4'
+                            }>
+                                {enrolledClasses.map((cls, index) => (
+                                    <ClassCard key={cls.id} cls={cls} index={index} isEnrolled={true} />
+                                ))}
+                            </div>
+                        )}
+                    </>
                 )}
 
-                {/* Action Bar */}
-                <div className="flex justify-between items-center mb-6">
-                    <button
-                        onClick={() => setShowJoinModal(true)}
-                        className="flex items-center space-x-2 px-6 py-3 bg-[#0099ff] text-white rounded-lg hover:bg-[#0088ee] transition-all shadow-lg shadow-[#0099ff]/30 font-semibold"
-                        style={{ fontFamily: 'Georgia, serif' }}
-                    >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-                        </svg>
-                        <span>{t[language].joinClass}</span>
-                    </button>
-
-                    {/* View Toggle */}
-                    <div className="flex space-x-2">
-                        <button
-                            onClick={() => setViewMode('grid')}
-                            className={`p-2 rounded-lg transition-all ${
-                                viewMode === 'grid'
-                                    ? 'bg-[#0099ff]/10 text-[#0099ff] shadow-md'
-                                    : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
-                            }`}
-                            title={t[language].gridView}
-                        >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-                            </svg>
-                        </button>
-                        <button
-                            onClick={() => setViewMode('list')}
-                            className={`p-2 rounded-lg transition-all ${
-                                viewMode === 'list'
-                                    ? 'bg-[#0099ff]/10 text-[#0099ff] shadow-md'
-                                    : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
-                            }`}
-                            title={t[language].listView}
-                        >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
-                            </svg>
-                        </button>
-                    </div>
-                </div>
-
-                {/* Classes Grid/List */}
-                {classes.length === 0 ? (
-                    <div className="text-center py-16">
-                        <svg className="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                        </svg>
-                        <h3 className="text-lg font-semibold text-gray-900 mb-2" style={{ fontFamily: 'Georgia, serif' }}>{t[language].noClasses}</h3>
-                        <p className="text-gray-500" style={{ fontFamily: 'Georgia, serif' }}>{t[language].startLearning}</p>
-                    </div>
-                ) : (
-                    <div className={viewMode === 'grid' 
-                        ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'
-                        : 'space-y-4'
-                    }>
-                        {classes.map((cls, index) => (
-                            <div
-                                key={cls.id}
-                                onClick={() => router.push(`/dashboard/class/${cls.id}`)}
-                                className="bg-white rounded-lg border border-gray-200 overflow-hidden hover:shadow-xl hover:border-[#0099ff]/30 transition-all cursor-pointer group"
-                            >
-                                {/* Class Cover */}
-                                <div className={`h-24 bg-gradient-to-r ${getClassCoverColor(index)} p-4 group-hover:opacity-90 transition-opacity`}>
-                                    <h3 className="text-white text-xl font-bold truncate" style={{ fontFamily: 'Georgia, serif' }}>{cls.name}</h3>
-                                    <p className="text-white/80 text-sm truncate" style={{ fontFamily: 'Georgia, serif' }}>
-                                        {t[language].lecturer}: {cls.lecturer_name || 'Unknown'}
-                                    </p>
+                {/* Available Classes Tab */}
+                {activeTab === 'available' && (
+                    <>
+                        {availableClasses.length === 0 ? (
+                            <div className="text-center py-20">
+                                <div className="w-24 h-24 mx-auto mb-6 bg-gray-100 rounded-full flex items-center justify-center">
+                                    <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                                    </svg>
                                 </div>
-
-                                {/* Class Info */}
-                                <div className="p-4">
-                                    <p className="text-gray-600 text-sm mb-3 line-clamp-2" style={{ fontFamily: 'Georgia, serif' }}>
-                                        {cls.description || 'No description'}
-                                    </p>
-                                    
-                                    <div className="text-sm text-gray-500" style={{ fontFamily: 'Georgia, serif' }}>
-                                        {cls.start_date} - {cls.end_date}
-                                    </div>
-                                </div>
+                                <h3 className="text-xl font-semibold text-gray-900 mb-2">{t[language].noAvailableClasses}</h3>
                             </div>
-                        ))}
-                    </div>
+                        ) : (
+                            <div className={viewMode === 'grid' 
+                                ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5'
+                                : 'space-y-4'
+                            }>
+                                {availableClasses.map((cls, index) => (
+                                    <ClassCard key={cls.id} cls={cls} index={index} isEnrolled={false} />
+                                ))}
+                            </div>
+                        )}
+                    </>
                 )}
             </main>
 
-            {/* Join Class Modal */}
-            {showJoinModal && (
-                <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-2xl border border-gray-200">
-                        <h2 className="text-xl font-bold text-gray-900 mb-4" style={{ fontFamily: 'Georgia, serif' }}>
-                            {t[language].joinClass}
+            {/* Join with Code Modal */}
+            {showCodeModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-2xl">
+                        <h2 className="text-2xl font-semibold text-gray-900 mb-2">
+                            {selectedClass?.name}
                         </h2>
+                        <p className="text-sm text-gray-600 mb-6">
+                            {t[language].enterClassCode}
+                        </p>
 
-                        <form onSubmit={handleJoinClass} className="space-y-4">
+                        <form onSubmit={handleJoinWithCode} className="space-y-5">
                             <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-1" style={{ fontFamily: 'Georgia, serif' }}>
-                                    {t[language].enterClassCode}
-                                </label>
                                 <input
                                     type="text"
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0099ff] focus:border-transparent transition-all font-mono"
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all font-mono text-lg"
                                     value={joinCode}
                                     onChange={(e) => setJoinCode(e.target.value)}
-                                    placeholder="e.g., ABC123"
+                                    placeholder="ABC123"
                                     required
                                 />
                             </div>
@@ -335,18 +471,17 @@ export default function StudentDashboard() {
                                 <button
                                     type="button"
                                     onClick={() => {
-                                        setShowJoinModal(false);
+                                        setShowCodeModal(false);
+                                        setSelectedClass(null);
                                         setJoinCode('');
                                     }}
-                                    className="px-5 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-all font-semibold border border-gray-300"
-                                    style={{ fontFamily: 'Georgia, serif' }}
+                                    className="px-6 py-2.5 text-gray-700 hover:bg-gray-100 rounded-lg transition-all font-medium border border-gray-300"
                                 >
                                     {t[language].cancel}
                                 </button>
                                 <button
                                     type="submit"
-                                    className="px-5 py-2 bg-[#0099ff] text-white rounded-lg hover:bg-[#0088ee] transition-all shadow-lg shadow-[#0099ff]/30 font-bold"
-                                    style={{ fontFamily: 'Georgia, serif' }}
+                                    className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all shadow-sm font-medium"
                                 >
                                     {t[language].join}
                                 </button>

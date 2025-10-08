@@ -14,13 +14,12 @@ export default function LecturerDashboard() {
     const [language, setLanguage] = useState('en');
     const [message, setMessage] = useState('');
     const [formData, setFormData] = useState({});
-    const [viewMode, setViewMode] = useState('grid'); // grid or list
+    const [viewMode, setViewMode] = useState('grid');
 
-    // Translations
     const t = {
         en: {
             logo_name: 'OCS',
-            myClasses: 'My Classes',
+            Title: 'Online Classroom System',
             createClass: 'Create Class',
             noClasses: 'No classes yet',
             startTeaching: 'Start teaching by creating your first class',
@@ -34,6 +33,8 @@ export default function LecturerDashboard() {
             openToAll: 'Open to All',
             codeRequired: 'Code Required',
             classCode: 'Class Code',
+            generatedCode: 'Generated Code',
+            codeWillBeGenerated: 'Code will be generated automatically when you create the class',
             create: 'Create',
             cancel: 'Cancel',
             logout: 'Logout',
@@ -43,7 +44,7 @@ export default function LecturerDashboard() {
         },
         vi: {
             logo_name: 'OCS',
-            myClasses: 'Lớp Của Tôi',
+            Title: 'Lớp Của Tôi',
             createClass: 'Tạo Lớp Học',
             noClasses: 'Chưa có lớp học nào',
             startTeaching: 'Bắt đầu giảng dạy bằng cách tạo lớp học đầu tiên',
@@ -57,6 +58,8 @@ export default function LecturerDashboard() {
             openToAll: 'Mở Cho Tất Cả',
             codeRequired: 'Yêu Cầu Mã',
             classCode: 'Mã Lớp',
+            generatedCode: 'Mã Được Tạo',
+            codeWillBeGenerated: 'Mã sẽ được tạo tự động khi bạn tạo lớp học',
             create: 'Tạo',
             cancel: 'Hủy',
             logout: 'Đăng Xuất',
@@ -81,8 +84,31 @@ export default function LecturerDashboard() {
     const fetchClasses = async () => {
         try {
             const res = await api.get('/classes/');
-            // Filter only classes created by this lecturer
-            const lecturerClasses = res.data.filter(cls => cls.lecturer === user.id || cls.created_by === user.id);
+            
+            console.log('All classes response:', res.data);
+            console.log('Current user ID:', user.id);
+            
+            const lecturerClasses = res.data.filter(cls => {
+                const lecturerId = typeof cls.lecturer === 'object' && cls.lecturer !== null
+                    ? cls.lecturer.id
+                    : cls.lecturer;
+                
+                const createdById = typeof cls.created_by === 'object' && cls.created_by !== null
+                    ? cls.created_by.id
+                    : cls.created_by;
+                
+                console.log(`✓ Class "${cls.name}": lecturer=${lecturerId}, created_by=${createdById}, user=${user.id}`);
+                
+                const match = lecturerId === user.id || createdById === user.id;
+                
+                if (match) {
+                    console.log(` MATCHED!`);
+                }
+                
+                return match;
+            });
+            
+            console.log('Filtered lecturer classes:', lecturerClasses);
             setClasses(lecturerClasses);
         } catch (error) {
             console.error('Error fetching classes:', error);
@@ -92,71 +118,108 @@ export default function LecturerDashboard() {
     const handleCreateClass = async (e) => {
         e.preventDefault();
         try {
-            await api.post('/classes/', {
-                ...formData,
+            const payload = {
+                name: formData.name,
+                description: formData.description,
+                start_date: formData.start_date,
+                end_date: formData.end_date,
+                is_open_enrollment: formData.is_open_enrollment,
                 lecturer: user.id,
                 created_by: user.id
+            };
+            
+            Object.keys(payload).forEach(key => {
+                if (payload[key] === null || payload[key] === undefined || payload[key] === '') {
+                    delete payload[key];
+                }
             });
-            setMessage('Class created successfully!');
+            
+            console.log('📤 Sending class payload:', payload);
+            
+            const response = await api.post('/classes/', payload);
+            
+            if (response.data.class_code && !response.data.is_open_enrollment) {
+                setMessage(`Class created successfully! Generated Code: ${response.data.class_code}`);
+            } else {
+                setMessage('Class created successfully!');
+            }
+            
             setShowCreateModal(false);
             setFormData({});
             fetchClasses();
         } catch (error) {
-            setMessage(error.response?.data?.detail || 'Error creating class');
+            console.error('❌ Create class error:', error.response?.data);
+            
+            let errorMsg = 'Error creating class';
+            if (error.response?.data) {
+                const data = error.response.data;
+                if (data.detail) {
+                    errorMsg = data.detail;
+                } else if (data.message) {
+                    errorMsg = data.message;
+                }
+            }
+            setMessage(errorMsg);
         }
     };
 
     const getClassCoverColor = (index) => {
         const colors = [
-            'from-blue-500 to-blue-600',
-            'from-green-500 to-green-600',
-            'from-purple-500 to-purple-600',
-            'from-orange-500 to-orange-600',
-            'from-pink-500 to-pink-600',
-            'from-indigo-500 to-indigo-600',
+            'from-blue-600 to-blue-700',
+            'from-green-600 to-green-700',
+            'from-purple-600 to-purple-700',
+            'from-orange-600 to-orange-700',
+            'from-pink-600 to-pink-700',
+            'from-indigo-600 to-indigo-700',
         ];
         return colors[index % colors.length];
     };
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-white flex items-center justify-center">
-                <div className="text-gray-600">{t[language].loading}</div>
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+                <div className="text-gray-600 text-lg">{t[language].loading}</div>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-white">
-            {/* Header */}
-            <div className="bg-[#151520] border-b border-[#2a2a35] px-6 py-4">
-                <div className="flex justify-between items-center">
-                    <div>
-                        <h1 className="text-3xl font-bold bg-gradient-to-r from-[#00ff88] to-[#0099ff] bg-clip-text text-transparent font-georgia">
-                            {t[language].logo_name}
-                        </h1>
-                        <p className="text-white font-georgia">{t[language].myClasses}</p>
+        <div className="min-h-screen bg-gray-50">
+            {/* Header - Google Classroom style */}
+            <div className="bg-white border-b border-gray-200 px-6 py-4 shadow-sm">
+                <div className="flex justify-between items-center max-w-7xl mx-auto">
+                    <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center">
+                            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h1 className="text-xl font-semibold text-gray-800">
+                                {t[language].Title}
+                            </h1>
+                        </div>
                     </div>
                     
                     <div className="flex items-center space-x-4">
                         {/* Language Switcher */}
-                        <div className="flex bg-[#1a1a25] border border-[#2a2a35] rounded-lg p-1">
+                        <div className="flex bg-gray-100 rounded-lg p-1">
                             <button
                                 onClick={() => setLanguage('en')}
-                                className={`px-2 py-0.5 rounded text-xs font-medium transition-all ${
+                                className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${
                                     language === 'en' 
-                                        ? 'bg-[#00ff88] text-[#0a0a0f]' 
-                                        : 'text-[#a0a0b0] hover:text-white'
+                                        ? 'bg-white text-green-600 shadow-sm' 
+                                        : 'text-gray-600 hover:text-gray-900'
                                 }`}
                             >
                                 EN
                             </button>
                             <button
                                 onClick={() => setLanguage('vi')}
-                                className={`px-2 py-0.5 rounded text-xs font-medium transition-all ${
+                                className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${
                                     language === 'vi' 
-                                        ? 'bg-[#00ff88] text-[#0a0a0f]' 
-                                        : 'text-[#a0a0b0] hover:text-white'
+                                        ? 'bg-white text-green-600 shadow-sm' 
+                                        : 'text-gray-600 hover:text-gray-900'
                                 }`}
                             >
                                 VI
@@ -167,30 +230,30 @@ export default function LecturerDashboard() {
                         <div className="relative">
                             <button
                                 onClick={() => setShowDropdown(!showDropdown)}
-                                className="flex items-center space-x-3 px-4 py-2 bg-[#1a1a25] border border-[#2a2a35] rounded-lg hover:border-[#00ff88]/30 transition-all"
+                                className="flex items-center space-x-2 px-3 py-2 hover:bg-gray-100 rounded-lg transition-all"
                             >
-                                <div className="w-8 h-8 bg-gradient-to-r from-[#00ff88] to-[#0099ff] rounded-full flex items-center justify-center font-semibold text-[#0a0a0f]">
+                                <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center font-semibold text-white text-sm">
                                     {user?.username?.charAt(0).toUpperCase() || 'L'}
                                 </div>
-                                <span className="text-sm font-medium text-white">{user?.username || 'Lecturer'}</span>
-                                <svg className={`w-4 h-4 transition-transform text-white ${showDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <span className="text-sm font-medium text-gray-700">{user?.username || 'Lecturer'}</span>
+                                <svg className={`w-4 h-4 text-gray-600 transition-transform ${showDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
                                 </svg>
                             </button>
                             
                             {showDropdown && (
-                                <div className="absolute right-0 mt-2 w-48 bg-[#1a1a25] border border-[#2a2a35] rounded-lg shadow-lg z-50">
+                                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
                                     <div className="py-2">
-                                        <div className="px-4 py-2 border-b border-[#2a2a35]">
-                                            <p className="text-sm font-medium text-white">{user?.email}</p>
-                                            <p className="text-xs text-[#a0a0b0]">Lecturer</p>
+                                        <div className="px-4 py-3 border-b border-gray-100">
+                                            <p className="text-sm font-medium text-gray-900">{user?.email}</p>
+                                            <p className="text-xs text-gray-500 mt-1">Lecturer</p>
                                         </div>
                                         <button
                                             onClick={() => {
                                                 setShowDropdown(false);
                                                 logout();
                                             }}
-                                            className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-[#2a2a35] transition-colors"
+                                            className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
                                         >
                                             {t[language].logout}
                                         </button>
@@ -204,47 +267,33 @@ export default function LecturerDashboard() {
 
             {/* Message notification */}
             {message && (
-                <div className={`mx-6 mt-4 p-4 rounded-lg ${
-                    message.toLowerCase().includes('error') || message.toLowerCase().includes('failed')
-                        ? 'bg-red-500/10 text-red-400 border border-red-500/20' 
-                        : 'bg-green-500/10 text-green-400 border border-green-500/20'
-                }`}>
-                    <div className="flex items-center justify-between">
-                        <span>{message}</span>
-                        <button onClick={() => setMessage('')} className="text-xl hover:text-white transition-colors">&times;</button>
+                <div className="max-w-7xl mx-auto px-6 mt-4">
+                    <div className={`p-4 rounded-lg ${
+                        message.toLowerCase().includes('error') || message.toLowerCase().includes('failed')
+                            ? 'bg-red-50 text-red-700 border border-red-200' 
+                            : 'bg-green-50 text-green-700 border border-green-200'
+                    }`}>
+                        <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium">{message}</span>
+                            <button onClick={() => setMessage('')} className="text-xl hover:opacity-70 transition-opacity">&times;</button>
+                        </div>
                     </div>
                 </div>
             )}
 
             {/* Main Content */}
-            <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                {/* Message */}
-                {message && (
-                    <div className={`mb-6 p-4 rounded-lg ${
-                        message.includes('Error') || message.includes('error')
-                            ? 'bg-red-50 text-red-600 border border-red-200'
-                            : 'bg-green-50 text-green-600 border border-green-200'
-                    }`}>
-                        <div className="flex items-center justify-between">
-                            <span>{message}</span>
-                            <button onClick={() => setMessage('')} className="text-xl">&times;</button>
-                        </div>
-                    </div>
-                )}
-
+            <main className="max-w-7xl mx-auto px-6 py-6">
                 {/* Action Bar */}
-                <div className="flex justify-between items-center mb-6">
+                <div className="flex justify-between items-center mb-8">
                     <button
                         onClick={() => {
                             setShowCreateModal(true);
                             setFormData({
                                 enrollment_type: 'open',
-                                is_open_enrollment: true,
-                                class_code: ''
+                                is_open_enrollment: true
                             });
                         }}
-                        className="flex items-center space-x-2 px-6 py-3 bg-[#00ff88] text-[#0a0a0f] rounded-lg hover:bg-[#00dd77] transition-all shadow-lg shadow-[#00ff88]/30 font-semibold"
-                        style={{ fontFamily: 'Georgia, serif' }}
+                        className="flex items-center space-x-2 px-6 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all shadow-sm font-medium"
                     >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
@@ -253,13 +302,13 @@ export default function LecturerDashboard() {
                     </button>
 
                     {/* View Toggle */}
-                    <div className="flex space-x-2">
+                    <div className="flex bg-gray-100 rounded-lg p-1">
                         <button
                             onClick={() => setViewMode('grid')}
-                            className={`p-2 rounded-lg transition-all ${
+                            className={`p-2 rounded-md transition-all ${
                                 viewMode === 'grid'
-                                    ? 'bg-[#00ff88]/10 text-[#00ff88] shadow-md'
-                                    : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+                                    ? 'bg-white text-green-600 shadow-sm'
+                                    : 'text-gray-500 hover:text-gray-700'
                             }`}
                             title={t[language].gridView}
                         >
@@ -269,10 +318,10 @@ export default function LecturerDashboard() {
                         </button>
                         <button
                             onClick={() => setViewMode('list')}
-                            className={`p-2 rounded-lg transition-all ${
+                            className={`p-2 rounded-md transition-all ${
                                 viewMode === 'list'
-                                    ? 'bg-[#00ff88]/10 text-[#00ff88] shadow-md'
-                                    : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+                                    ? 'bg-white text-green-600 shadow-sm'
+                                    : 'text-gray-500 hover:text-gray-700'
                             }`}
                             title={t[language].listView}
                         >
@@ -286,73 +335,85 @@ export default function LecturerDashboard() {
                 {/* Classes Grid/List */}
                 {classes.length === 0 ? (
                     <div className="text-center py-16">
-                        <svg className="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                        </svg>
-                        <h3 className="text-lg font-semibold text-gray-900 mb-2" style={{ fontFamily: 'Georgia, serif' }}>{t[language].noClasses}</h3>
-                        <p className="text-gray-500" style={{ fontFamily: 'Georgia, serif' }}>{t[language].startTeaching}</p>
+                        <div className="w-24 h-24 mx-auto mb-6 bg-gray-100 rounded-full flex items-center justify-center">
+                            <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                            </svg>
+                        </div>
+                        <h3 className="text-xl font-semibold text-gray-900 mb-2">{t[language].noClasses}</h3>
+                        <p className="text-gray-600">{t[language].startTeaching}</p>
                     </div>
                 ) : (
                     <div className={viewMode === 'grid' 
-                        ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'
+                        ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5'
                         : 'space-y-4'
                     }>
-                        {classes.map((cls, index) => (
-                            <div
-                                key={cls.id}
-                                onClick={() => router.push(`/dashboard/class/${cls.id}`)}
-                                className="bg-white rounded-lg border border-gray-200 overflow-hidden hover:shadow-xl hover:border-[#00ff88]/30 transition-all cursor-pointer group"
-                            >
-                                {/* Class Cover */}
-                                <div className={`h-24 bg-gradient-to-r ${getClassCoverColor(index)} p-4 group-hover:opacity-90 transition-opacity`}>
-                                    <h3 className="text-white text-xl font-bold truncate" style={{ fontFamily: 'Georgia, serif' }}>{cls.name}</h3>
-                                    <p className="text-white/80 text-sm truncate font-mono">{cls.class_code || 'No code'}</p>
-                                </div>
+                        {classes.map((cls, index) => {
+                            const gradientColor = getClassCoverColor(index);
+                            const borderColor = gradientColor.includes('blue') ? 'border-blue-200' :
+                                               gradientColor.includes('green') ? 'border-green-200' :
+                                               gradientColor.includes('purple') ? 'border-purple-200' :
+                                               gradientColor.includes('orange') ? 'border-orange-200' :
+                                               gradientColor.includes('pink') ? 'border-pink-200' :
+                                               'border-indigo-200';
+                            
+                            return (
+                                <div
+                                    key={cls.id}
+                                    onClick={() => router.push(`/dashboard/class/${cls.id}`)}
+                                    className={`bg-white rounded-xl border-2 ${borderColor} overflow-hidden hover:shadow-xl transition-all cursor-pointer group hover:-translate-y-1`}
+                                >
+                                    {/* Class Cover */}
+                                    <div className={`h-24 bg-gradient-to-r ${gradientColor} p-4 relative`}>
+                                        <h3 className="text-white text-lg font-semibold truncate mb-1">{cls.name}</h3>
+                                        <p className="text-white/90 text-xs font-mono tracking-wider">
+                                            {cls.class_code || 'No code'}
+                                        </p>
+                                    </div>
 
-                                {/* Class Info */}
-                                <div className="p-4">
-                                    <p className="text-gray-600 text-sm mb-3 line-clamp-2" style={{ fontFamily: 'Georgia, serif' }}>
-                                        {cls.description || 'No description'}
-                                    </p>
-                                    
-                                    <div className="flex items-center justify-between text-sm">
-                                        <span className="text-gray-500" style={{ fontFamily: 'Georgia, serif' }}>
-                                            {/* TODO: Get actual student count */}
-                                            0 {t[language].students}
-                                        </span>
-                                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                                            cls.is_open_enrollment
-                                                ? 'bg-[#00ff88]/10 text-[#00ff88]'
-                                                : 'bg-[#0099ff]/10 text-[#0099ff]'
-                                        }`} style={{ fontFamily: 'Georgia, serif' }}>
-                                            {cls.is_open_enrollment ? t[language].openToAll : t[language].codeRequired}
-                                        </span>
+                                    {/* Class Info */}
+                                    <div className="p-4">
+                                        <p className="text-gray-600 text-sm mb-3 line-clamp-2 leading-relaxed min-h-[2.5rem]">
+                                            {cls.description || 'No description'}
+                                        </p>
+                                        
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-xs text-gray-600 font-medium">
+                                                0 {t[language].students}
+                                            </span>
+                                            <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                                                cls.is_open_enrollment
+                                                    ? 'bg-green-100 text-green-700'
+                                                    : 'bg-blue-100 text-blue-700'
+                                            }`}>
+                                                {cls.is_open_enrollment ? t[language].openToAll : t[language].codeRequired}
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 )}
             </main>
 
             {/* Create Class Modal */}
             {showCreateModal && (
-                <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-200">
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl">
                         <div className="p-6">
-                            <h2 className="text-xl font-bold text-gray-900 mb-4" style={{ fontFamily: 'Georgia, serif' }}>
+                            <h2 className="text-2xl font-semibold text-gray-900 mb-6">
                                 {t[language].createClass}
                             </h2>
 
-                            <form onSubmit={handleCreateClass} className="space-y-4">
+                            <form onSubmit={handleCreateClass} className="space-y-5">
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-1" style={{ fontFamily: 'Georgia, serif' }}>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
                                         {t[language].className}
                                     </label>
                                     <input
                                         type="text"
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00ff88] focus:border-transparent transition-all"
-                                        style={{ fontFamily: 'Georgia, serif' }}
+                                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
                                         value={formData.name || ''}
                                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                                         required
@@ -360,12 +421,11 @@ export default function LecturerDashboard() {
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-1" style={{ fontFamily: 'Georgia, serif' }}>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
                                         {t[language].description}
                                     </label>
                                     <textarea
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00ff88] focus:border-transparent transition-all"
-                                        style={{ fontFamily: 'Georgia, serif' }}
+                                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
                                         rows="3"
                                         value={formData.description || ''}
                                         onChange={(e) => setFormData({ ...formData, description: e.target.value })}
@@ -374,26 +434,24 @@ export default function LecturerDashboard() {
 
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                        <label className="block text-sm font-semibold text-gray-700 mb-1" style={{ fontFamily: 'Georgia, serif' }}>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
                                             {t[language].startDate}
                                         </label>
                                         <input
                                             type="date"
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00ff88] focus:border-transparent transition-all"
-                                            style={{ fontFamily: 'Georgia, serif' }}
+                                            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
                                             value={formData.start_date || ''}
                                             onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
                                             required
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-semibold text-gray-700 mb-1" style={{ fontFamily: 'Georgia, serif' }}>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
                                             {t[language].endDate}
                                         </label>
                                         <input
                                             type="date"
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00ff88] focus:border-transparent transition-all"
-                                            style={{ fontFamily: 'Georgia, serif' }}
+                                            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
                                             value={formData.end_date || ''}
                                             onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
                                             required
@@ -402,59 +460,52 @@ export default function LecturerDashboard() {
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-1" style={{ fontFamily: 'Georgia, serif' }}>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
                                         {t[language].enrollmentType}
                                     </label>
                                     <select
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00ff88] focus:border-transparent transition-all"
-                                        style={{ fontFamily: 'Georgia, serif' }}
-                                        value={formData.enrollment_type || 'open'}
+                                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                                        value={formData.is_open_enrollment ? 'open' : 'code'}
                                         onChange={(e) => {
-                                            const enrollmentType = e.target.value;
+                                            const isOpen = e.target.value === 'open';
                                             setFormData({
                                                 ...formData,
-                                                enrollment_type: enrollmentType,
-                                                is_open_enrollment: enrollmentType === 'open',
-                                                class_code: enrollmentType === 'open' ? '' : formData.class_code
+                                                is_open_enrollment: isOpen
                                             });
                                         }}
                                     >
                                         <option value="open">{t[language].openToAll}</option>
-                                        <option value="code_required">{t[language].codeRequired}</option>
+                                        <option value="code">{t[language].codeRequired}</option>
                                     </select>
                                 </div>
 
-                                {formData.enrollment_type === 'code_required' && (
-                                    <div>
-                                        <label className="block text-sm font-semibold text-gray-700 mb-1" style={{ fontFamily: 'Georgia, serif' }}>
-                                            {t[language].classCode} *
-                                        </label>
-                                        <input
-                                            type="text"
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00ff88] focus:border-transparent transition-all font-mono"
-                                            value={formData.class_code || ''}
-                                            onChange={(e) => setFormData({ ...formData, class_code: e.target.value })}
-                                            required
-                                        />
+                                {formData.is_open_enrollment === false && (
+                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                        <div className="flex items-start space-x-3">
+                                            <svg className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                            <p className="text-sm text-blue-800">
+                                                {t[language].codeWillBeGenerated}
+                                            </p>
+                                        </div>
                                     </div>
                                 )}
 
-                                <div className="flex justify-end space-x-3 pt-4">
+                                <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
                                     <button
                                         type="button"
                                         onClick={() => {
                                             setShowCreateModal(false);
                                             setFormData({});
                                         }}
-                                        className="px-5 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-all font-semibold border border-gray-300"
-                                        style={{ fontFamily: 'Georgia, serif' }}
+                                        className="px-6 py-2.5 text-gray-700 hover:bg-gray-100 rounded-lg transition-all font-medium border border-gray-300"
                                     >
                                         {t[language].cancel}
                                     </button>
                                     <button
                                         type="submit"
-                                        className="px-5 py-2 bg-[#00ff88] text-[#0a0a0f] rounded-lg hover:bg-[#00dd77] transition-all shadow-lg shadow-[#00ff88]/30 font-bold"
-                                        style={{ fontFamily: 'Georgia, serif' }}
+                                        className="px-6 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all shadow-sm font-medium"
                                     >
                                         {t[language].create}
                                     </button>

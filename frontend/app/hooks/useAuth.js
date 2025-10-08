@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, use } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import api from '../utils/api';
 
@@ -24,10 +24,8 @@ export const useAuth = (options = {}) => {
           return;
         }
 
-        // ✅ V2: Check if we have tokens in sessionStorage
         // sessionStorage is ISOLATED per tab → No conflict!
         // access_token và session_id in sessionStorage
-        // refresh_token in httpOnly cookie (browser manages)
         const accessToken = sessionStorage.getItem('access_token');
         const sessionId = sessionStorage.getItem('session_id');
 
@@ -66,20 +64,25 @@ export const useAuth = (options = {}) => {
     checkAuth();
   }, []);
 
+  // ❌ REMOVED: Auto-logout on tab close
+  // Reason: Cannot reliably distinguish between tab close and page refresh
+  // Solution: Mark old sessions as inactive when user logs in again
+  // See CustomLoginView in backend for implementation
+
   const logout = async () => {
     try {
       const sessionId = sessionStorage.getItem('session_id');
       
-      // ✅ V2: Send logout request (cookie auto sent by browser)
+      // Send logout request (cookie auto sent by browser)
       await api.post('/logout/', { session_id: sessionId }, { withCredentials: true });
       
-      console.log('✅ Logged out successfully');
-      console.log('✅ Cookie refresh_token_' + sessionId + ' will be deleted by backend');
+      console.log('Logged out successfully');
+      console.log('Cookie refresh_token_' + sessionId + ' will be deleted by backend');
     } catch (err) {
       console.error('Logout error:', err);
     }
     
-    // ✅ Clear sessionStorage
+    // Clear sessionStorage
     sessionStorage.removeItem('access_token');
     sessionStorage.removeItem('session_id');
     
@@ -88,4 +91,5 @@ export const useAuth = (options = {}) => {
   };
 
   return { user, loading, logout };
+
 };

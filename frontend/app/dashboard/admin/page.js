@@ -87,7 +87,7 @@ export default function AdminDashboard() {
         totalMaterials: 'Total Materials',
         students: 'Students',
         lecturers: 'Lecturers',
-        lecturer_name: 'Lecturer Name',
+        lecturer_email: 'Lecturer Email',
         admins: 'Admins',
         loginHistory: 'Login History',
         username: 'Username',
@@ -171,9 +171,11 @@ export default function AdminDashboard() {
         codeRequiredDescription: 'Students need class code to join this class',
         enrollmentType: 'Enrollment Type',
         codeRequired: 'Enter code',
-        allowAll: 'Allow All',
+        allowAll: 'Allow all',
         enterClassCode: 'Enter class code',
         classCodeHint: 'Students will use this code to join the class',
+        generatedCode: 'Generated Code',
+        codeWillBeGenerated: 'Code will be generated automatically',
     },
 
     vi: {
@@ -193,7 +195,7 @@ export default function AdminDashboard() {
         totalMaterials: 'Tổng Tài Liệu',
         students: 'Học Sinh',
         lecturers: 'Giảng Viên',
-        lecturer_name: 'Tên Giảng Viên',
+        lecturer_email: 'Email Giảng Viên',
         admins: 'Quản Trị Viên',
         loginHistory: 'Lịch Sử Đăng Nhập',
         username: 'Tên Người Dùng',
@@ -277,9 +279,11 @@ export default function AdminDashboard() {
         codeRequiredDescription: 'Sinh viên cần mã lớp để tham gia lớp học này',
         enrollmentType: 'Loại Đăng Ký',
         codeRequired: 'Yêu Cầu Mã',
-        openToAll: 'Mở Cho Tất Cả',
+        allowAll: 'Mở Cho Tất Cả',
         enterClassCode: 'Nhập mã lớp học',
         classCodeHint: 'Sinh viên sẽ sử dụng mã này để tham gia lớp',
+        generatedCode: 'Mã Được Tạo',
+        codeWillBeGenerated: 'Mã sẽ được tạo tự động',
     }
 };
 
@@ -395,114 +399,59 @@ export default function AdminDashboard() {
     const handleCreateSubmit = async (e) => {
         e.preventDefault();
         
-        if (createType === 'user' && !isEditing) {
-            if (!formData.username || formData.username.trim().length < 3) {
-                setMessage('Username must be at least 3 characters long');
-                return;
-            }
-            
-            if (!/^[a-zA-Z0-9_]+$/.test(formData.username)) {
-                setMessage('Username can only contain letters, numbers, and underscores');
-                return;
-            }
-            
-            if (!formData.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-                setMessage('Please enter a valid email address');
-                return;
-            }
-            
-            if (!formData.password || formData.password.length < 8) {
-                setMessage('Password must be at least 8 characters long');
-                return;
-            }
-            
-            if (formData.password !== formData.password_confirm) {
-                setMessage('Passwords do not match');
-                return;
-            }
-        }
-        
         try {
-            let endpoint = '';
-            let payload = { ...formData };
-            
-            switch (createType) {
-                case 'class':
-                    endpoint = '/classes/';
-                    break;
-                case 'session':
-                    endpoint = '/sessions/';
-                    break;
-                case 'class-announcement':
-                    endpoint = '/announcements/';
-                    break;
-                case 'system-announcement':
-                    endpoint = '/announcements/';
-                    delete payload.class_id;
-                    break;
-                case 'user':
-                    endpoint = '/admin/users/create/';
-                    payload = {
-                        username: formData.username.trim(),
-                        email: formData.email.trim().toLowerCase(),
-                        password: formData.password,
-                        password_confirm: formData.password_confirm,
-                        role: formData.role || 'student'
-                    };
-                    break;
+            let payload = {};
+
+            // Build payload based on type
+            if (createType === 'class') {
+                payload = {
+                    name: formData.name,
+                    description: formData.description,
+                    start_date: formData.start_date,
+                    end_date: formData.end_date,
+                    is_open_enrollment: formData.is_open_enrollment || false
+                };
+                
+            } else if (createType === 'session') {
+                payload = {
+                    class_id: parseInt(formData.class_id),
+                    topic: formData.topic,
+                    date: formData.date
+                };
+            }
+            // ...existing code for other types...
+
+            // Helper function to get plural endpoint
+            const getEndpoint = (type) => {
+                const endpoints = {
+                    'user': 'users',
+                    'class': 'classes',
+                    'session': 'sessions',
+                    'material': 'materials',
+                    'announcement': 'announcements'
+                };
+                return endpoints[type] || `${type}s`;
+            };
+
+            let response;
+            if (isEditing) {
+                response = await api.put(`/${getEndpoint(createType)}/${selectedItem.id}/`, payload);
+                setMessage(`${createType.charAt(0).toUpperCase() + createType.slice(1)} ${t[language].updatedSuccess}`);
+            } else {
+                response = await api.post(`/${getEndpoint(createType)}/`, payload);
+                setMessage(`${createType.charAt(0).toUpperCase() + createType.slice(1)} ${t[language].createdSuccess}`);
+                
+                // Show generated class code if available
+                if (createType === 'class' && response.data.class_code && !response.data.is_open_enrollment) {
+                    setMessage(`${t[language].createdSuccess} ${t[language].generatedCode}: ${response.data.class_code}`);
+                }
             }
 
-            if (isEditing && createType !== 'user') {
-                await api.put(`${endpoint}${selectedItem.id}/`, payload);
-                setMessage(`${createType.replace('-', ' ')} ${t[language].updatedSuccess}`);
-            } else {
-                const response = await api.post(endpoint, payload);
-                setMessage(`${createType.replace('-', ' ')} ${t[language].createdSuccess}`);
-                console.log('Created successfully:', response.data);
-            }
-            
-            setShowCreateModal(false);
-            setFormData({});
-            setIsEditing(false);
-            setSelectedItem(null);
-            
-            if (createType === 'user') {
-                await fetchUsers();
-            } else {
-                await fetchDashboardData();
-            }
-            
-            setTimeout(() => setMessage(''), 3000);
+            resetModal();
+            fetchDashboardData();
         } catch (error) {
-            console.error('Error creating/updating:', error);
-            
-            let errorMsg = t[language].errorOccurred;
-            
-            if (error.response?.data) {
-                const data = error.response.data;
-                
-                if (data.details) {
-                    const errors = [];
-                    for (const [field, messages] of Object.entries(data.details)) {
-                        if (Array.isArray(messages)) {
-                            errors.push(`${field}: ${messages.join(', ')}`);
-                        } else {
-                            errors.push(`${field}: ${messages}`);
-                        }
-                    }
-                    errorMsg = errors.join('; ');
-                } else if (data.message) {
-                    errorMsg = data.message;
-                } else if (data.error) {
-                    errorMsg = data.error;
-                } else if (data.detail) {
-                    errorMsg = data.detail;
-                }
-            } else if (error.message) {
-                errorMsg = error.message;
-            }
-            
-            setMessage(`${t[language].errorOccurred}: ${errorMsg}`);
+            console.error('Error:', error);
+            setMessage(`${t[language].errorOccurred}: ${error.response?.data?.detail || error.message}`);
         }
     };
 
@@ -810,7 +759,7 @@ export default function AdminDashboard() {
                                 id: 'overview', 
                                 label: t[language].overview,
                                 icon: (
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                                     </svg>
                                 )
@@ -819,7 +768,7 @@ export default function AdminDashboard() {
                                 id: 'users', 
                                 label: t[language].users,
                                 icon: (
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                                     </svg>
                                 )
@@ -828,7 +777,7 @@ export default function AdminDashboard() {
                                 id: 'classes', 
                                 label: t[language].classes,
                                 icon: (
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                                     </svg>
                                 )
@@ -837,7 +786,7 @@ export default function AdminDashboard() {
                                 id: 'sessions', 
                                 label: t[language].sessions,
                                 icon: (
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 01-2 2h-2a2 2 0 01-2-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                                     </svg>
                                 )
@@ -888,39 +837,41 @@ export default function AdminDashboard() {
                 </div>
 
                 {/* Main Content */}
-                <div className="flex-1 p-6">
+                <div className="flex-1 p-4">
                     {activeTab === 'overview' && (
                         <div className="space-y-6">
                             <h2 className="text-xl font-bold mb-6">{t[language].overview}</h2>
                             
-                            {/* Stats Cards với Icons */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                            {/* Stats Cards - Compact & Tall */}
+                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                                 {statsCards.map((stat, index) => (
                                     <div 
                                         key={index} 
                                         onClick={() => setActiveTab(stat.tab)}
-                                        className="bg-[#151520] border border-[#2a2a35] rounded-xl p-6 hover:border-[#00ff88]/30 transition-all cursor-pointer transform hover:scale-105"
+                                        className="bg-[#151520] border border-[#2a2a35] rounded-xl p-4 py-5 hover:border-[#00ff88]/30 transition-all cursor-pointer transform hover:scale-105"
                                     >
                                         <div className="flex items-center justify-between">
-                                            <div>
-                                                <p className="text-[#a0a0b0] text-sm mb-2">{stat.title}</p>
+                                            <div className="flex-1 min-w-0 pr-3">
+                                                <p className="text-[#a0a0b0] text-sl mb-2 truncate">{stat.title}</p>
                                                 <p className="text-2xl font-bold text-white">{stat.value}</p>
                                             </div>
-                                            <div className={`p-3 rounded-xl bg-gradient-to-r ${stat.color} text-white`}>
-                                                {stat.icon}
-                                            </div>
+                                            <div className={`p-3 rounded-xl bg-gradient-to-r ${stat.color} text-white flex-shrink-0`}>
+                                                <div className="w-6 h-6 flex items-center justify-center">
+                                                    {stat.icon}
+                                                </div>
+                                            </div>                                            
                                         </div>
                                     </div>
                                 ))}
                             </div>
 
-                            {/* Login History Table */}
+                            {/* Login History Table - Compact spacing */}
                             <div className="mt-8">
                                 <div className="flex items-center justify-between mb-4">
                                     <h3 className="text-lg font-bold">{t[language].loginHistory}</h3>
                                     <button
                                         onClick={fetchLoginHistory}
-                                        className="px-3 py-1 bg-[#2a2a35] hover:bg-[#3a3a45] rounded-lg text-sm transition-colors"
+                                        className="px-3 py-2 bg-[#2a2a35] hover:bg-[#3a3a45] rounded-lg text-sm transition-colors"
                                     >
                                         <svg className="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -934,34 +885,34 @@ export default function AdminDashboard() {
                                         <table className="w-full">
                                             <thead className="bg-[#1a1a25] border-b border-[#2a2a35]">
                                                 <tr>
-                                                    <th className="px-6 py-4 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].index}</th>
-                                                    <th className="px-6 py-4 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].username}</th>
-                                                    <th className="px-6 py-4 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].email}</th>
-                                                    <th className="px-6 py-4 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].role}</th>
-                                                    <th className="px-6 py-4 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].ipAddress}</th>
-                                                    <th className="px-6 py-4 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].loginTime}</th>
-                                                    <th className="px-6 py-4 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].logoutTime}</th>                    
-                                                    <th className="px-6 py-4 text-center text-sm font-semibold text-[#a0a0b0]">{t[language].status}</th>
+                                                    <th className="px-3 py-2 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].index}</th>
+                                                    <th className="px-3 py-2 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].username}</th>
+                                                    <th className="px-3 py-2 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].email}</th>
+                                                    <th className="px-3 py-2 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].role}</th>
+                                                    <th className="px-3 py-2 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].ipAddress}</th>
+                                                    <th className="px-3 py-2 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].loginTime}</th>
+                                                    <th className="px-3 py-2 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].logoutTime}</th>
+                                                    <th className="px-3 py-2 text-center text-sm font-semibold text-[#a0a0b0]">{t[language].status}</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-[#2a2a35]">
                                                 {loginHistory.map((history, index) => (
                                                     <tr key={history.id} className="hover:bg-[#1a1a25] transition-colors">
-                                                        <td className="px-6 py-4 text-sm">{index + 1}</td>
-                                                        <td className="px-6 py-4">
-                                                            <div className="flex items-center space-x-3">
-                                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-semibold text-sm ${
+                                                        <td className="px-4 py-2 text-sm text-center">{index + 1}</td>
+                                                        <td className="px-4 py-2">
+                                                            <div className="flex items-center space-x-2">
+                                                                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white font-semibold text-sm ${
                                                                     history.user_role === 'admin' ? 'bg-purple-500' :
                                                                     history.user_role === 'lecturer' ? 'bg-green-500' : 'bg-blue-500'
                                                                 }`}>
                                                                     {history.username?.charAt(0).toUpperCase() || 'U'}
                                                                 </div>
-                                                                <span className="font-medium">{history.username}</span>
+                                                                <span className="font-medium text-sm">{history.username}</span>
                                                             </div>
                                                         </td>
-                                                        <td className="px-6 py-4 text-sm text-[#a0a0b0]">{history.email}</td>
-                                                        <td className="px-6 py-4">
-                                                            <span className={`text-xs font-medium capitalize px-3 py-1 rounded-full ${
+                                                        <td className="px-3 py-2 text-sm text-[#a0a0b0]">{history.email}</td>
+                                                        <td className="px-3 py-2">
+                                                            <span className={`text-xs font-medium capitalize px-2 py-1 rounded-full ${
                                                                 history.user_role === 'admin' ? 'bg-purple-500/20 text-purple-300' :
                                                                 history.user_role === 'lecturer' ? 'bg-green-500/20 text-green-300' : 
                                                                 'bg-blue-500/20 text-blue-300'
@@ -969,16 +920,20 @@ export default function AdminDashboard() {
                                                                 {history.user_role}
                                                             </span>
                                                         </td>
-                                                        <td className="px-6 py-4 text-sm text-[#a0a0b0]">{history.ip_address || t[language].unknown} ({getDeviceInfo(history.user_agent)})</td>
-                                                        <td className="px-6 py-4 text-sm text-[#a0a0b0]">{formatDateTime(history.login_time)}</td>
-                                                        <td className="px-6 py-4 text-sm text-[#a0a0b0]">{formatDateTime(history.logout_time)}</td>
-                                                        <td className="px-6 py-4 text-center">
+                                                        <td className="px-3 py-2 text-sm text-[#a0a0b0]">
+                                                            {history.ip_address || t[language].unknown}
+                                                            <br/>
+                                                            <span className="text-xs text-[#808090]">({getDeviceInfo(history.user_agent)})</span>
+                                                        </td>
+                                                        <td className="px-3 py-2 text-sm text-[#a0a0b0] whitespace-nowrap">{formatDateTime(history.login_time)}</td>
+                                                        <td className="px-3 py-2 text-sm text-[#a0a0b0] whitespace-nowrap">{formatDateTime(history.logout_time)}</td>
+                                                        <td className="px-3 py-2 text-center">
                                                             <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
                                                                 history.is_active 
                                                                     ? 'bg-green-500/20 text-green-300' 
                                                                     : 'bg-gray-500/20 text-gray-400'
                                                             }`}>
-                                                                <span className={`w-2 h-2 rounded-full mr-2 ${
+                                                                <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
                                                                     history.is_active ? 'bg-green-400' : 'bg-gray-400'
                                                                 }`}></span>
                                                                 {history.is_active ? t[language].active : t[language].inactive}
@@ -1094,8 +1049,7 @@ export default function AdminDashboard() {
                                         setShowCreateModal(true);
                                         setFormData({
                                             enrollment_type: 'open',
-                                            is_open_enrollment: true,
-                                            class_code: ''
+                                            is_open_enrollment: true
                                         });
                                         setIsEditing(false);
                                     }}
@@ -1110,25 +1064,25 @@ export default function AdminDashboard() {
                                 <table className="w-full">
                                     <thead className="bg-[#1a1a25] border-b border-[#2a2a35]">
                                         <tr>
-                                            <th className="px-6 py-4 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].index}</th>
-                                            <th className="px-6 py-4 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].class_name}</th>
-                                            <th className="px-6 py-4 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].lecturer_name}</th>
-                                            <th className="px-6 py-4 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].dates}</th>
-                                            <th className="px-6 py-4 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].students}</th>
-                                            <th className="px-6 py-4 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].enrollmentType}</th>
-                                            <th className="px-6 py-4 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].code}</th>
-                                            <th className="px-6 py-4 text-center text-sm font-semibold text-[#a0a0b0]">{t[language].actions}</th>
+                                            <th className="px-5 py-3 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].index}</th>
+                                            <th className="px-5 py-3 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].class_name}</th>
+                                            <th className="px-5 py-3 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].lecturer_email}</th>
+                                            <th className="px-5 py-3 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].dates}</th>
+                                            <th className="px-5 py-3 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].students}</th>
+                                            <th className="px-5 py-3 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].enrollmentType}</th>
+                                            <th className="px-5 py-3 text-left text-sm font-semibold text-[#a0a0b0]">{t[language].code}</th>
+                                            <th className="px-5 py-3 text-center text-sm font-semibold text-[#a0a0b0]">{t[language].actions}</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-[#2a2a35]">
                                         {classes.map((cls, index) => (
                                             <tr key={cls.id} className="hover:bg-[#1a1a25] transition-colors">
-                                                <td className="px-6 py-4 text-sm">{index + 1}</td>
-                                                <td className="px-6 py-4 font-medium">{cls.name}</td>
-                                                <td className="px-6 py-4 text-sm ">{cls.lecturer || '-'}</td>                                                
-                                                <td className="px-6 py-4 text-sm text-[#a0a0b0]">{cls.start_date} - {cls.end_date}</td>
-                                                <td className="px-6 py-4 text-sm font-semibold text-[#00ff88]">{getClassStudentCount(cls.id)}</td>
-                                                <td className="px-6 py-4">
+                                                <td className="px-5 py-3 text-sm">{index + 1}</td>
+                                                <td className="px-5 py-3 font-medium">{cls.name}</td>
+                                                <td className="px-5 py-3 text-sm ">{cls.lecturer_email || 'None'}</td>                                                
+                                                <td className="px-5 py-3 text-sm text-[#a0a0b0]">{cls.start_date} - {cls.end_date}</td>
+                                                <td className="px-5 py-3 text-sm font-semibold text-[#00ff88]">{getClassStudentCount(cls.id)}</td>
+                                                <td className="px-5 py-3">
                                                     <span className={`text-xs font-medium px-3 py-1 rounded-full ${
                                                         cls.is_open_enrollment 
                                                             ? 'bg-green-500/20 text-green-300' 
@@ -1138,8 +1092,12 @@ export default function AdminDashboard() {
                                                         {cls.is_open_enrollment ? t[language].allowAll : t[language].codeRequired}
                                                     </span>
                                                 </td>
-                                                <td className="px-6 py-4 text-sm text-[#00ff88]">{cls.class_code || 'None'}</td>
-                                                <td className="px-6 py-4">
+                                                <td className="px-5 py-3">
+                                                    <span className={`text-sm ${cls.class_code ? 'text-orange-300' : 'text-green-300'}`}>
+                                                        {cls.class_code || 'None'}
+                                                    </span>
+                                                </td>
+                                                <td className="px-5 py-3">
                                                     <div className="flex justify-center space-x-2">
                                                         <button 
                                                             onClick={() => handleEdit(cls, 'class')}
@@ -1503,43 +1461,50 @@ export default function AdminDashboard() {
                                     </div>                                    
                                     
                                     <div>
-                                        <label className="block text-sm font-medium mb-2">{t[language].enrollmentType}</label>
+                                        <label className="block text-sm font-medium mb-2">
+                                            {t[language].enrollmentType}
+                                        </label>
                                         <select
                                             className="w-full bg-[#1a1a25] border border-[#2a2a35] rounded-lg px-3 py-2 focus:border-[#00ff88] focus:outline-none"
-                                            value={formData.enrollment_type || 'open'}
+                                            value={formData.is_open_enrollment ? 'open' : 'code'}
                                             onChange={(e) => {
-                                                const enrollmentType = e.target.value;
-                                                setFormData({ 
-                                                    ...formData, 
-                                                    enrollment_type: enrollmentType,
-                                                    is_open_enrollment: enrollmentType === 'open',
-                                                    class_code: enrollmentType === 'open' ? '' : formData.class_code
+                                                const isOpen = e.target.value === 'open';
+                                                setFormData({
+                                                    ...formData,
+                                                    is_open_enrollment: isOpen
                                                 });
                                             }}
                                         >
-                                            <option value="open">{t[language].openToAll}</option>
-                                            <option value="code_required">{t[language].codeRequired}</option>
+                                            <option value="open">{t[language].allowAll}</option>
+                                            <option value="code">{t[language].codeRequired}</option>
                                         </select>
-                                        <p className="text-xs text-[#a0a0b0] mt-1">
-                                            {formData.enrollment_type === 'open' 
-                                                ? t[language].openEnrollmentDescription 
-                                                : t[language].codeRequiredDescription
-                                            }
-                                        </p>
                                     </div>
                                     
-                                    {formData.enrollment_type === 'code_required' && (
+                                    {/* Show info when code required is selected */}
+                                    {formData.is_open_enrollment === false && !isEditing && (
+                                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                            <div className="flex items-start space-x-2">
+                                                <svg className="w-5 h-5 text-blue-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                </svg>
+                                                <p className="text-sm text-blue-700">
+                                                    {t[language].codeWillBeGenerated}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Show generated code when editing */}
+                                    {isEditing && selectedItem?.class_code && (
                                         <div>
-                                            <label className="block text-sm font-medium mb-2">{t[language].code} *</label>
-                                            <input
-                                                type="text"
-                                                className="w-full bg-[#1a1a25] border border-[#2a2a35] rounded-lg px-3 py-2 focus:border-[#00ff88] focus:outline-none"
-                                                value={formData.class_code || ''}
-                                                onChange={(e) => setFormData({ ...formData, class_code: e.target.value })}
-                                                placeholder={t[language].enterClassCode}
-                                                required
-                                            />
-                                            <p className="text-xs text-[#a0a0b0] mt-1">{t[language].classCodeHint}</p>
+                                            <label className="block text-sm font-medium mb-2">
+                                                {t[language].generatedCode}
+                                            </label>
+                                            <div className="px-3 py-2 bg-[#1a1a25] border border-[#2a2a35] rounded-lg">
+                                                <code className="text-lg font-mono font-bold text-[#00ff88]">
+                                                    {selectedItem.class_code}
+                                                </code>
+                                            </div>
                                         </div>
                                     )}
                                 </>

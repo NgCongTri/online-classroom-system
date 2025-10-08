@@ -7,3 +7,5 @@ __pycache__/
 postgresql/
 Nodejs/
 venv/
+classroom/logs/*.log
+*.log

@@ -1,30 +1,37 @@
 'use client';
 import axios from 'axios';
 
-/**
- * V2: API Client with Cookie Session ID Prefix
- * - Access Token → localStorage
- * - Refresh Token → httpOnly cookie với key: refresh_token_{session_id}
- * - Session ID → localStorage
- * 
- * Advantages:
- * ✅ Mỗi session có cookie riêng (không conflict)
- * ✅ Vẫn dùng httpOnly (bảo mật cao)
- * ✅ Auto refresh token độc lập cho mỗi session
- */
-
 const api = axios.create({
   baseURL: 'http://localhost:8000/api',
-  withCredentials: true,  // ✅ Auto send/receive cookies
+  withCredentials: true,  
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// ✅ REQUEST INTERCEPTOR: Add access_token and session_id to all requests
+// Helper function to decode JWT and check expiration
+const isTokenExpired = (token) => {
+  if (!token) return true;
+  
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return true;
+    
+    const payload = JSON.parse(atob(parts[1]));
+    const exp = payload.exp * 1000; // Convert to milliseconds
+    const now = Date.now();
+    
+    // Token expired if exp time is less than current time
+    // Add 1 minute buffer to refresh before actual expiration
+    return exp < (now + 60000);
+  } catch (error) {
+    console.error('Error decoding token:', error);
+    return true;
+  }
+};
+
 api.interceptors.request.use(
   (config) => {
-    // ✅ Get from sessionStorage (isolated per tab)
     const accessToken = sessionStorage.getItem('access_token');
     const sessionId = sessionStorage.getItem('session_id');
     
@@ -61,20 +68,21 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
     
-    // If 401 and not already retrying
+    // If 401 (Unauthorized) and not already retrying
     if (error.response?.status === 401 && !originalRequest._retry) {
       
-      // Prevent infinite loop
+      // Prevent infinite loop - if refresh endpoint also returns 401
       if (originalRequest.url?.includes('/token/refresh/')) {
-        // Refresh token also expired → Logout
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('session_id');
+        // Refresh token also expired → Force logout
+        console.log('❌ Refresh token expired, logging out...');
+        sessionStorage.removeItem('access_token');
+        sessionStorage.removeItem('session_id');
         window.location.href = '/';
         return Promise.reject(error);
       }
       
+      // If already refreshing, queue this request
       if (isRefreshing) {
-        // Wait for token refresh to complete
         return new Promise((resolve) => {
           subscribeTokenRefresh((token) => {
             originalRequest.headers.Authorization = `Bearer ${token}`;
@@ -83,6 +91,7 @@ api.interceptors.response.use(
         });
       }
       
+      // Mark as retrying to prevent duplicate refresh calls
       originalRequest._retry = true;
       isRefreshing = true;
       
@@ -90,42 +99,50 @@ api.interceptors.response.use(
         const sessionId = sessionStorage.getItem('session_id');
         
         if (!sessionId) {
-          throw new Error('No session ID');
+          throw new Error('No session ID found');
         }
         
-        console.log('🔄 Refreshing access token for session:', sessionId);
+        console.log('🔄 Access token expired, refreshing for session:', sessionId);
         
-        // ✅ V2: Call refresh endpoint
-        // Cookie refresh_token_{session_id} is sent automatically by browser
+        // Call refresh endpoint (cookie refresh_token_{session_id} sent automatically)
         const refreshResponse = await axios.post(
           'http://localhost:8000/api/token/refresh/',
-          { session_id: sessionId },  // Only send session_id
-          { withCredentials: true }   // ✅ Browser auto sends cookie
+          {},  // Empty body - backend reads refresh token from cookie
+          { 
+            withCredentials: true,
+            headers: {
+              'X-Session-ID': sessionId
+            }
+          }
         );
         
         const newAccessToken = refreshResponse.data.access;
         
-        // ✅ Save new access_token to sessionStorage
+        // Save new access token to sessionStorage
         sessionStorage.setItem('access_token', newAccessToken);
         
-        console.log('✅ Token refreshed successfully for session:', sessionId);
+        console.log('✅ Access token refreshed successfully');
         
-        // ✅ Update header and retry original request
+        // Update the failed request's authorization header
         originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
         
-        // Notify waiting requests
+        // Notify all queued requests with new token
         onRefreshed(newAccessToken);
         isRefreshing = false;
         
+        // Retry the original request with new token
         return api(originalRequest);
         
       } catch (refreshError) {
         console.error('❌ Token refresh failed:', refreshError);
         
-        // Refresh failed → Logout
+        // Refresh failed → Force logout
         isRefreshing = false;
+        refreshSubscribers = [];
         sessionStorage.removeItem('access_token');
         sessionStorage.removeItem('session_id');
+        
+        // Redirect to login page
         window.location.href = '/';
         
         return Promise.reject(refreshError);

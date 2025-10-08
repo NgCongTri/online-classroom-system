@@ -32,29 +32,21 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
-# ✅ Custom User Model - MUST be defined BEFORE INSTALLED_APPS
-AUTH_USER_MODEL = 'classroom.User'
-
 
 # Application definition
 
 INSTALLED_APPS = [
-    # ✅ CRITICAL: Load classroom BEFORE django.contrib.auth
-    'classroom.apps.ClassroomConfig',  # Explicit config
-    
-    # Django built-in apps
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    
-    # Third-party apps
     'corsheaders',
     'rest_framework',
     'rest_framework_simplejwt',
-    'rest_framework_simplejwt.token_blacklist',
+    'rest_framework_simplejwt.token_blacklist', 
+    'classroom',
 ]
 
 
@@ -170,9 +162,8 @@ SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=45),  # ✅ 45 phút cho session học
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),     # ✅ 1 ngày
     
-    # Token Rotation (Security best practice)
-    'ROTATE_REFRESH_TOKENS': True,      # ✅ Tạo refresh token mới mỗi lần refresh
-    'BLACKLIST_AFTER_ROTATION': True,   # ✅ Blacklist token cũ
+    'ROTATE_REFRESH_TOKENS': False,  
+    'BLACKLIST_AFTER_ROTATION': False,
     'UPDATE_LAST_LOGIN': False,
 
     # Algorithm & Keys
@@ -196,4 +187,4 @@ SIMPLE_JWT = {
     'JTI_CLAIM': 'jti',
 }
 
-# Note: AUTH_USER_MODEL moved to top of file (before INSTALLED_APPS)
+AUTH_USER_MODEL = 'classroom.User'

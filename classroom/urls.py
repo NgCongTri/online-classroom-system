@@ -3,7 +3,8 @@ from .views import ( RegisterView, CustomLoginView, UserListCreateView, UserDeta
     get_user, LogoutView, CustomTokenRefreshView, ClassListCreateView,
     ClassDetailView, SessionListCreateView, SessionDetailView, InviteUserView,
     AttendanceView, MaterialView, SystemAnnouncementView, ClassAnnouncementView,
-    enroll_class, AdminCreateUserView, LoginHistoryView
+    enroll_class, AdminCreateUserView, LoginHistoryView, ClassMembershipView,
+    get_available_classes, join_open_class, join_class_with_code
 )
 from rest_framework.decorators import api_view
 
@@ -37,6 +38,9 @@ urlpatterns = [
     path('classes/', ClassListCreateView.as_view(), name='class-list'),
     path('classes/<int:pk>/', ClassDetailView.as_view(), name='class-detail'),
     path('enroll/', enroll_class, name='enroll_class'),
+    path('classes/available/', get_available_classes, name='available-classes'),
+    path('classes/<int:class_id>/join/', join_open_class, name='join-open-class'),
+    path('classes/join-with-code/', join_class_with_code, name='join-with-code'),
     
     # Session management
     path('sessions/', SessionListCreateView.as_view(), name='session-list'),
@@ -44,6 +48,7 @@ urlpatterns = [
     
     # Membership
     path('invite/', InviteUserView.as_view(), name='invite-user'),
+    path('class-memberships/', ClassMembershipView.as_view(), name='class-membership'),
     
     # Attendance
     path('attendances/', AttendanceView.as_view(), name='attendance-list'),

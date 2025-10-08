@@ -17,7 +17,8 @@ from django.utils import timezone
 import logging
 from rest_framework.decorators import api_view, permission_classes, authentication_classes
 from .authentication import CookieJWTAuthentication
-
+import json
+from rest_framework.views import APIView
 logger = logging.getLogger(__name__)
 
 class RegisterView(generics.CreateAPIView):
@@ -98,17 +99,11 @@ class AdminCreateUserView(generics.CreateAPIView):
                 'message': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
 class CustomLoginView(TokenObtainPairView):
-    """
-    Hybrid Login (Like Google/Facebook):
-    - Access Token → Response JSON (Frontend stores in localStorage)
-    - Refresh Token → httpOnly Cookie (Secure, not accessible by JavaScript)
-    - Session ID → Response JSON (Frontend stores in localStorage)
-    """
-    
+
     def post(self, request, *args, **kwargs):
         try:
-            # ✅ Get JWT tokens from parent class
             response = super().post(request, *args, **kwargs)
             
             if response.status_code == 200:
@@ -126,21 +121,28 @@ class CustomLoginView(TokenObtainPairView):
                             'message': 'Failed to generate authentication tokens'
                         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
                     
-                    # ✅ Create new session
+                    previous_sessions = LoginHistory.objects.filter(
+                        user=user,
+                        logout_time__isnull=True 
+                    )
+                    
+                    if previous_sessions.exists():
+                        count = previous_sessions.update(logout_time=timezone.now())
+                        logger.info(f"🔄 Marked {count} previous session(s) as inactive for user {user.username}")
+                    
                     ip_address = request.META.get('REMOTE_ADDR', '127.0.0.1')
                     login_history = LoginHistory.objects.create(
                         user=user,
                         ip_address=ip_address,
                         user_agent=request.META.get('HTTP_USER_AGENT', ''),
-                        access_token=access_token,   # Store for tracking
-                        refresh_token=refresh_token  # Store for validation
+                        access_token=access_token,  
+                        refresh_token=refresh_token  
                     )
                     
                     session_id = str(login_history.session_id)
                     
                     logger.info(f"User {user.username} ({user.role}) logged in. Session: {session_id}")
                     
-                    # ✅ Response với access_token và session_id (Frontend lưu localStorage)
                     response.data = {
                         'access': access_token,
                         'session_id': session_id,
@@ -150,18 +152,17 @@ class CustomLoginView(TokenObtainPairView):
                             'email': user.email,
                             'role': user.role,
                         },
-                        'expires_in': 45 * 60  # 45 minutes in seconds
+                        'expires_in': 45 * 60
                     }
                     
-                    # ✅ V2: Set refresh_token với session_id prefix (UNIQUE per session)
-                    # Mỗi session có cookie riêng → Không conflict giữa các user
+                    
                     response.set_cookie(
-                        key=f'refresh_token_{session_id}',  # ✅ UNIQUE KEY
+                        key=f'refresh_token_{session_id}',
                         value=refresh_token,
-                        httponly=True,   # JavaScript KHÔNG thể đọc (bảo mật cao)
-                        secure=False,    # Set True in production (HTTPS only)
-                        samesite='Lax',  # CSRF protection
-                        max_age=60 * 60 * 24  # 1 day
+                        httponly=True,   
+                        secure=False,   
+                        samesite='Lax', 
+                        max_age=60 * 60 * 24                      
                     )
                     
                     logger.info(f"✅ Set cookie: refresh_token_{session_id}")
@@ -180,100 +181,6 @@ class CustomLoginView(TokenObtainPairView):
                 'error': 'Login failed',
                 'message': 'An error occurred during login',
                 'details': str(e)
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-# ✅ V2: Token Refresh View
-class CustomTokenRefreshView(generics.GenericAPIView):
-    """
-    V2: Refresh Access Token using:
-    - Refresh Token from httpOnly cookie: refresh_token_{session_id}
-    - Session ID from request header/body
-    
-    Advantages:
-    - Mỗi session có cookie riêng (không conflict)
-    - Vẫn dùng httpOnly (bảo mật cao)
-    - Browser tự động gửi cookie
-    """
-    permission_classes = []  # No authentication required for refresh
-    
-    def post(self, request):
-        try:
-            # ✅ Get session_id from header or body
-            session_id = request.headers.get('X-Session-ID') or request.data.get('session_id')
-            
-            if not session_id:
-                return Response({
-                    'error': 'No session ID',
-                    'message': 'Session ID is required'
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            # ✅ V2: Get refresh_token from cookie with session_id prefix
-            cookie_key = f'refresh_token_{session_id}'
-            refresh_token = request.COOKIES.get(cookie_key)
-            
-            # 🔍 DEBUG: Log all cookies
-            logger.info(f"🔍 Looking for cookie: {cookie_key}")
-            logger.info(f"🔍 Available cookies: {list(request.COOKIES.keys())}")
-            logger.info(f"🔍 Found refresh_token: {'Yes' if refresh_token else 'No'}")
-            
-            if not refresh_token:
-                logger.warning(f"❌ No cookie found: {cookie_key}")
-                logger.warning(f"Available cookies: {list(request.COOKIES.keys())}")
-                return Response({
-                    'error': 'No refresh token',
-                    'message': 'Refresh token not found. Please login again.'
-                }, status=status.HTTP_401_UNAUTHORIZED)
-            
-            # ✅ Validate session is still active
-            try:
-                login_history = LoginHistory.objects.select_related('user').get(
-                    session_id=session_id,
-                    logout_time__isnull=True
-                )
-            except LoginHistory.DoesNotExist:
-                return Response({
-                    'error': 'Invalid session',
-                    'message': 'Session not found or has been logged out'
-                }, status=status.HTTP_401_UNAUTHORIZED)
-            
-            # ✅ Validate refresh_token matches session
-            if login_history.refresh_token != refresh_token:
-                return Response({
-                    'error': 'Token mismatch',
-                    'message': 'Refresh token does not match session'
-                }, status=status.HTTP_401_UNAUTHORIZED)
-            
-            # ✅ Generate new access token
-            from rest_framework_simplejwt.tokens import RefreshToken
-            
-            try:
-                refresh = RefreshToken(refresh_token)
-                new_access_token = str(refresh.access_token)
-                
-                # ✅ Update access_token in database
-                login_history.access_token = new_access_token
-                login_history.save(update_fields=['access_token'])
-                
-                logger.info(f"Token refreshed for session {session_id}, user: {login_history.user.username}")
-                
-                # ✅ Return new access_token
-                return Response({
-                    'access': new_access_token,
-                    'expires_in': 45 * 60  # 45 minutes
-                }, status=status.HTTP_200_OK)
-                
-            except Exception as token_error:
-                logger.error(f"Token refresh error: {str(token_error)}")
-                return Response({
-                    'error': 'Invalid token',
-                    'message': 'Refresh token is invalid or expired. Please login again.'
-                }, status=status.HTTP_401_UNAUTHORIZED)
-            
-        except Exception as e:
-            logger.error(f"Token refresh error: {str(e)}")
-            return Response({
-                'error': 'Refresh failed',
-                'message': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class UserListCreateView(generics.ListCreateAPIView):
@@ -310,89 +217,114 @@ def get_user(request):
         'role': user.role
     })
 
-class LogoutView(generics.GenericAPIView):
-    """
-    Logout specific session:
-    - Blacklist refresh token
-    - Mark session as logged out
-    - Clear refresh_token cookie
-    """
-    permission_classes = [IsAuthenticated]
+class LogoutView(APIView):
+    permission_classes = []
     
     def post(self, request):
         try:
-            # ✅ Get session_id from header or body
-            session_id = request.headers.get('X-Session-ID') or request.data.get('session_id')
+            session_id = None
+            try:
+                session_id = request.data.get('session_id')
+            except Exception:
+                pass
             
-            if session_id:
-                # ✅ Find and logout session
-                login_history = LoginHistory.objects.filter(
-                    session_id=session_id,
-                    user=request.user,
-                    logout_time__isnull=True
-                ).first()
-                
-                if login_history:
-                    # ✅ Blacklist refresh token
-                    try:
-                        from rest_framework_simplejwt.tokens import RefreshToken
-                        from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
-                        
-                        if login_history.refresh_token:
-                            refresh = RefreshToken(login_history.refresh_token)
-                            refresh.blacklist()
-                            logger.info(f"Refresh token blacklisted for session {session_id}")
-                    except Exception as blacklist_error:
-                        logger.warning(f"Failed to blacklist token: {str(blacklist_error)}")
-                    
-                    # ✅ Mark session as logged out
-                    login_history.logout_time = timezone.now()
-                    login_history.access_token = None   # Clear tokens
-                    login_history.refresh_token = None
-                    login_history.save()
-                    
-                    logger.info(f"Session {session_id} logged out for user {request.user.username}")
+            # If not found, try parsing request.body (beacon request or raw body)
+            if not session_id and request.body:
+                try:
+                    body_data = json.loads(request.body.decode('utf-8'))
+                    session_id = body_data.get('session_id')
+                except Exception:
+                    pass
             
-            # ✅ V2: Clear refresh_token_{session_id} cookie
-            response = Response({
-                'message': 'Logged out successfully'
-            }, status=status.HTTP_200_OK)
+            if not session_id:
+                return Response(
+                    {'error': 'Session ID is required'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )            
             
-            if session_id:
-                response.delete_cookie(f'refresh_token_{session_id}')
-                logger.info(f"✅ Deleted cookie: refresh_token_{session_id}")
+            login_history = LoginHistory.objects.filter(
+                session_id=session_id,
+                logout_time__isnull=True
+            ).first()
+            
+            if not login_history:
+                return Response(
+                    {'error': 'Active session not found'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            # Mark as inactive by setting logout_time
+            login_history.logout_time = timezone.now()
+            login_history.save()
+
+            response = Response(
+                {'message': 'Logout successful'},
+                status=status.HTTP_200_OK
+            )
+            response.delete_cookie(f'refresh_token_{session_id}')
             
             return response
             
         except Exception as e:
-            logger.error(f"Logout error: {str(e)}")
-            return Response({
-                'error': 'Logout failed',
-                'message': str(e)
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            # Log the error for debugging
+            import traceback
+            print(f"❌ LogoutView Error: {str(e)}")
+            print(traceback.format_exc())
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 # Token refresh
 class CustomTokenRefreshView(TokenRefreshView):
     def post(self, request, *args, **kwargs):
-        refresh_token = request.COOKIES.get("refresh_token")
+        # Get session_id from header
+        session_id = request.headers.get('X-Session-ID')
+        
+        if not session_id:
+            logger.error('❌ No session ID in refresh request')
+            return Response(
+                {"detail": "Session ID is required"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Get refresh token from cookie (unique per session)
+        cookie_name = f"refresh_token_{session_id}"
+        refresh_token = request.COOKIES.get(cookie_name)
+        
         if not refresh_token:
-            return Response({"detail": "No refresh token in cookie"}, status=status.HTTP_400_BAD_REQUEST)
-
+            logger.error(f'❌ No refresh token found in cookie: {cookie_name}')
+            return Response(
+                {"detail": "No refresh token found"}, 
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+        
+        logger.info(f'🔄 Refreshing token for session: {session_id}')
+        
+        # Set refresh token in request data for parent class
         request.data['refresh'] = refresh_token
+        
+        # Call parent class to generate new access token
         response = super().post(request, *args, **kwargs)
-
+        
         if response.status_code == 200 and "access" in response.data:
             access_token = response.data["access"]
-            response.set_cookie(
-                key="access_token",
-                value=access_token,
-                httponly=True,
-                secure=False,   
-                samesite="Lax",
-                max_age=60 * 60  
-            )
-            del response.data["access"]
-            response.data["message"] = "Token refreshed successfully"
+            
+            # Update access token in LoginHistory
+            try:
+                login_history = LoginHistory.objects.get(
+                    session_id=session_id,
+                    logout_time__isnull=True
+                )
+                login_history.access_token = access_token
+                login_history.save(update_fields=['access_token'])
+                logger.info(f'✅ Access token refreshed for session: {session_id}')
+            except LoginHistory.DoesNotExist:
+                logger.warning(f'⚠️ Session {session_id} not found in LoginHistory')
+            
+            # Return new access token (frontend will save to sessionStorage)
+            # No need to set cookie - frontend handles storage
+        
         return response
 
 class LoginHistoryView(generics.ListAPIView):
@@ -410,10 +342,15 @@ class ClassListCreateView(generics.ListCreateAPIView):
     serializer_class = ClassSerializer
     permission_classes = [IsAuthenticated]
 
+    def create(self, request, *args, **kwargs):
+        logger.info(f"Received class creation data: {request.data}")
+        return super().create(request, *args, **kwargs)
+
     def perform_create(self, serializer):
         user = self.request.user
         if self.request.user.role not in ['lecturer', 'admin']:
             raise PermissionDenied("Only lecturers and admin can create classes")
+        logger.info(f"💾 Saving class with validated data: {serializer.validated_data}")
         serializer.save(created_by=user, lecturer=user if user.role == 'lecturer' else None)
 
     def get_queryset(self):
@@ -450,9 +387,29 @@ class ClassDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def get_object(self):   
         obj = super().get_object()
-        if self.request.user.role not in ['lecturer', 'admin'] and obj.lecturer != self.request.user:
-            raise PermissionDenied("You do not have permission to access this class")
-        return obj
+        user = self.request.user
+        
+        # Allow access if user is admin, lecturer of the class, or enrolled student
+        if user.role == 'admin' or obj.lecturer == user:
+            return obj
+        
+        # Check if student is enrolled in the class
+        if user.role == 'student' and ClassMembership.objects.filter(user=user, class_id=obj).exists():
+            return obj
+            
+        raise PermissionDenied("You do not have permission to access this class")
+    
+    def perform_update(self, serializer):
+        # Only lecturer and admin can update
+        if self.request.user.role not in ['lecturer', 'admin']:
+            raise PermissionDenied("Only lecturers and admins can update classes")
+        serializer.save()
+    
+    def perform_destroy(self, instance):
+        # Only lecturer and admin can delete
+        if self.request.user.role not in ['lecturer', 'admin']:
+            raise PermissionDenied("Only lecturers and admins can delete classes")
+        instance.delete()
 
 # SessionView 
 class SessionListCreateView(generics.ListCreateAPIView):
@@ -461,19 +418,40 @@ class SessionListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
 
     def perform_create(self, serializer):
-        if self.request.user.role not in ['lecturer', 'admin']:
-            raise PermissionDenied("Only lecturers can create sessions")
+        user = self.request.user
+        if user.role not in ['lecturer', 'admin']:
+            raise PermissionDenied("Only lecturers and admin can create sessions")
+        
         class_id = serializer.validated_data['class_id']
-        if class_id.lecturer != self.request.user and self.request.user.role != 'admin':
+        
+        # Admin can create sessions for any class
+        if user.role == 'admin':
+            serializer.save()
+            return
+        
+        # Lecturer can only create sessions for their own classes
+        if class_id.lecturer != user:
             raise PermissionDenied("You do not have permission to create a session for this class")
+        
         serializer.save()
 
     def get_queryset(self):
-        if self.request.user.role == 'admin':
-            return Session.objects.all()
-        if self.request.user.role == 'lecturer':
-            return Session.objects.filter(class_id__lecturer=self.request.user)
-        return Session.objects.filter(class_id__classmembership__user=self.request.user, class_id__classmembership__role='student')
+        class_id = self.request.query_params.get('class_id')
+        user = self.request.user
+        
+        if user.role == 'admin':
+            queryset = Session.objects.all()
+        elif user.role == 'lecturer':
+            queryset = Session.objects.filter(class_id__lecturer=user)
+        else:
+            # Student can see sessions of classes they're enrolled in
+            queryset = Session.objects.filter(class_id__memberships__user=user)
+        
+        # Filter by class_id if provided
+        if class_id:
+            queryset = queryset.filter(class_id=class_id)
+        
+        return queryset.select_related('class_id').order_by('date')
 
 class SessionDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Session.objects.all()
@@ -482,9 +460,21 @@ class SessionDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def get_object(self):
         obj = super().get_object()
-        if self.request.user.role not in ['lecturer', 'admin'] and obj.class_id.lecturer != self.request.user:
-            raise PermissionDenied("You do not have permission to access this session")
-        return obj
+        user = self.request.user
+        
+        # Admin always has access
+        if user.role == 'admin':
+            return obj
+        
+        # Lecturer has access to their own class sessions
+        if user.role == 'lecturer' and obj.class_id.lecturer == user:
+            return obj
+        
+        # Student has access if enrolled in the class
+        if user.role == 'student' and ClassMembership.objects.filter(user=user, class_id=obj.class_id).exists():
+            return obj
+            
+        raise PermissionDenied("You do not have permission to access this session")
 
 # Invite user by admin and lecturer
 class InviteUserView(generics.CreateAPIView):
@@ -492,11 +482,22 @@ class InviteUserView(generics.CreateAPIView):
     permission_classes = [IsAuthenticated]
 
     def perform_create(self, serializer):
-        if self.request.user.role not in ['lecturer', 'admin']:
+        user = self.request.user
+        if user.role not in ['lecturer', 'admin']:
             raise PermissionDenied("Only lecturers and admin can invite users")
+        
         class_id = serializer.validated_data['class_id']
-        if class_id.lecturer != self.request.user and self.request.user.role != 'admin':
+        
+        # Admin can invite to any class
+        if user.role == 'admin':
+            serializer.save()
+            return
+        
+        # Lecturer can only invite to their own classes
+        if class_id.lecturer != user:
             raise PermissionDenied("You can only invite to your own classes")
+        
+        serializer.save()
         serializer.save()
         print(f'invited {serializer.validated_data["user"].email} to {serializer.validated_data["class_id"].name} as {serializer.validated_data["role"]}')
 
@@ -512,6 +513,37 @@ class AttendanceView(generics.ListCreateAPIView):
         if Attendance.objects.filter(session=serializer.validated_data['session'], user=self.request.user).exists():
             raise ValidationError("You have already attended this session")
         serializer.save(user=self.request.user)
+
+class ClassMembershipView(generics.ListCreateAPIView):
+    serializer_class = ClassMembershipSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        class_id = self.request.query_params.get('class_id') or self.kwargs.get('class_id')
+        user = self.request.user
+
+        if class_id is None:
+            return ClassMembership.objects.filter(user=user).select_related('user', 'class_id')
+
+        if user.role == 'admin':
+            return ClassMembership.objects.filter(class_id=class_id).select_related('user', 'class_id')
+        elif user.role == 'lecturer':
+            return ClassMembership.objects.filter(class_id__lecturer=user, class_id=class_id).select_related('user', 'class_id')
+        else:
+            # Student can view members if they are enrolled in the class
+            if ClassMembership.objects.filter(class_id=class_id, user=user).exists():
+                return ClassMembership.objects.filter(class_id=class_id).select_related('user', 'class_id')
+            return ClassMembership.objects.none()
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        if user.role not in ['lecturer', 'admin']:
+            raise PermissionDenied("Only lecturers and admin can add members")
+
+        class_id = serializer.validated_data['class_id']
+        if class_id.lecturer != user and user.role != 'admin':
+            raise PermissionDenied("You can only add members to your own classes")
+        serializer.save()
 
 # Manage materials
 class MaterialView(generics.ListCreateAPIView):
@@ -552,20 +584,105 @@ class ClassAnnouncementView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        class_id = self.kwargs['class_id']
+        class_id = self.kwargs['class_id'] or self.request.query_params.get('class_id')
         user = self.request.user
+
+        if not class_id:
+            return Announcement.objects.none()
 
         if user.role == 'admin':
             return Announcement.objects.filter(class_id=class_id, type="class")
         elif user.role == 'lecturer':
-            return Announcement.objects.filter(class_id__lecturer=user, class_id=class_id, type="class")
-        return Announcement.objects.filter(class_id=class_id, class_id__classmembership__user=user, type="class")
+            return Announcement.objects.filter(class_id__lecturer=user, class_id=class_id, type="class").select_related('posted_by', 'class_id')
+        else:
+            # Student can view announcements if they are enrolled in the class
+            if ClassMembership.objects.filter(class_id=class_id, user=user).exists():
+                return Announcement.objects.filter(class_id=class_id, type="class").select_related('posted_by', 'class_id')
+            return Announcement.objects.none()
 
     def perform_create(self, serializer):
         user = self.request.user
         if user.role not in ['lecturer', 'admin']:
             raise PermissionDenied("Only lecturers or admins can create class announcements")
-        serializer.save(posted_by=user, type="class")
+
+        class_id = self.request.data.get('class_id') or self.kwargs.get('class_id')
+        if not class_id:
+            raise ValidationError("class_id is required")
+        serializer.save(posted_by=user, type="class", class_id_id=class_id)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_available_classes(request):
+    """Get all available classes for students to join"""
+    user = request.user
+    
+    if user.role != 'student':
+        return Response({'detail': 'Only students can view available classes'}, status=status.HTTP_403_FORBIDDEN)
+    
+    # Get all classes
+    all_classes = Class.objects.all()
+    
+    # Get classes student is already enrolled in
+    enrolled_class_ids = ClassMembership.objects.filter(
+        user=user
+    ).values_list('class_id', flat=True)
+    
+    # Filter out enrolled classes
+    available_classes = all_classes.exclude(id__in=enrolled_class_ids)
+    
+    serializer = ClassSerializer(available_classes, many=True)
+    return Response(serializer.data)
+
+# Join open class without code
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def join_open_class(request, class_id):
+    user = request.user
+    
+    if user.role != 'student':
+        return Response({'detail': 'Only students can join classes'}, status=status.HTTP_403_FORBIDDEN)
+    
+    try:
+        class_obj = Class.objects.get(id=class_id)
+
+        if not class_obj.is_open_enrollment:
+            return Response({'detail': 'This class requires a code to join'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if ClassMembership.objects.filter(user=user, class_id=class_obj).exists():
+            return Response({'detail': 'You are already enrolled in this class'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        ClassMembership.objects.create(user=user, class_id=class_obj, role='student')
+        
+        return Response({'detail': 'Successfully enrolled in class'}, status=status.HTTP_201_CREATED)
+        
+    except Class.DoesNotExist:
+        return Response({'detail': 'Class not found'}, status=status.HTTP_404_NOT_FOUND)
+
+# Join class with code
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def join_class_with_code(request):    
+    user = request.user
+    class_code = request.data.get('class_code')
+    
+    if user.role != 'student':
+        return Response({'detail': 'Only students can join classes'}, status=status.HTTP_403_FORBIDDEN)
+    
+    if not class_code:
+        return Response({'detail': 'Class code is required'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        class_obj = Class.objects.get(class_code=class_code)
+
+        if ClassMembership.objects.filter(user=user, class_id=class_obj).exists():
+            return Response({'detail': 'You are already enrolled in this class'}, status=status.HTTP_400_BAD_REQUEST)
+
+        ClassMembership.objects.create(user=user, class_id=class_obj, role='student')
+        
+        return Response({'detail': 'Successfully joined class'}, status=status.HTTP_201_CREATED)
+        
+    except Class.DoesNotExist:
+        return Response({'detail': 'Invalid class code'}, status=status.HTTP_404_NOT_FOUND)
 
 
 

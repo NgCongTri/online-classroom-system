@@ -74,11 +74,19 @@ class Class(models.Model):
     def __str__(self):
         return self.name
     
+    @staticmethod
+    def generate_class_code(length = 6):
+        max_attempts = 100
+        for _ in range(max_attempts):
+            code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
+            if not Class.objects.filter(class_code=code).exists():
+                return code
+        raise ValidationError("Unable to generate a unique class code. Please try again.")
+        
     def save(self, *args, **kwargs):
-        if self.class_code and self.class_code.strip():
-            if Class.objects.filter(class_code=self.class_code).exclude(id=self.id).exists():
-                raise ValidationError("Class code already exists")
-        elif not self.class_code: 
+        if not self.class_code and not self.is_open_enrollment:
+            self.class_code = Class.generate_class_code()
+        elif self.is_open_enrollment:
             self.class_code = None
         super().save(*args, **kwargs)
 
