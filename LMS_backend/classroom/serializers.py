@@ -211,7 +211,7 @@ class LoginHistorySerializer(serializers.ModelSerializer):
     email = serializers.CharField(source='user.email', read_only=True)
     user_role = serializers.CharField(source='user.role', read_only=True)
     is_active = serializers.SerializerMethodField()
-    session_id = serializers.UUIDField(read_only=True)  # ✅ Add session_id
+    session_id = serializers.UUIDField(read_only=True) 
 
     class Meta:
         model = LoginHistory
@@ -297,27 +297,32 @@ class ClassMembershipSerializer(serializers.ModelSerializer):
     user_email = serializers.CharField(source='user.email', read_only=True)
     class_name = serializers.CharField(source='class_id.name', read_only=True)
     user_name = serializers.CharField(source='user.username', read_only=True)
-    class_id = ClassSerializer(read_only=True)
+    class_data = serializers.SerializerMethodField()  
 
     class Meta:
         model = ClassMembership
-        fields = ['id', 'user', 'user_name', 'user_email', 'class_id', 'class_name', 'role', 'invited_at']
+        fields = ['id', 'user', 'user_name', 'user_email', 'class_id', 'class_name', 
+                  'class_data', 'role', 'invited_at'] 
         read_only_fields = ['invited_at']
+
+    def get_class_data(self, obj):
+        if obj.class_id:
+            return {
+                'id': obj.class_id.id,
+                'name': obj.class_id.name,
+                'description': obj.class_id.description,
+                'start_date': obj.class_id.start_date,
+                'end_date': obj.class_id.end_date,
+                'lecturer': obj.class_id.lecturer.id if obj.class_id.lecturer else None,
+                'lecturer_name': obj.class_id.lecturer.username if obj.class_id.lecturer else None,
+                'lecturer_email': obj.class_id.lecturer.email if obj.class_id.lecturer else None,
+                'created_by': obj.class_id.created_by.id if obj.class_id.created_by else None,
+                'created_at': obj.class_id.created_at,
+                'class_code': obj.class_id.class_code,
+                'is_open_enrollment': obj.class_id.is_open_enrollment,
+            }
+        return None
     
-    def to_internal_value(self, data):
-        if 'class_id' in data and isinstance(data['class_id'], int):
-            # Store the integer value temporarily
-            class_id_value = data['class_id']
-            # Remove it from data to prevent serializer error
-            data = data.copy()
-            data.pop('class_id')
-            # Call parent's to_internal_value
-            result = super().to_internal_value(data)
-            # Add back the class_id as the actual model instance
-            from .models import Class
-            result['class_id'] = Class.objects.get(id=class_id_value)
-            return result
-        return super().to_internal_value(data)
 
 class AttendanceSerializer(serializers.ModelSerializer):
     session_topic = serializers.CharField(source='session.topic', read_only=True)

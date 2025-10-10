@@ -83,12 +83,26 @@ export default function StudentDashboard() {
     const fetchEnrolledClasses = async () => {
         try {
             const res = await api.get('/class-memberships/');
+            console.log('Raw API response:', res.data); 
+            
             const myClasses = res.data
                 .filter(membership => membership.user === user.id)
-                .map(membership => ({
-                    ...membership.class_id,
-                    membership_id: membership.id
-                }));
+                .map(membership => {
+                    // Handle different possible property names
+                    const classData = membership.class_data ;
+                    
+                    if (!classData || !classData.id) {
+                        console.error('Missing class data in membership:', membership);
+                        return null;
+                    }
+                    
+                    return {
+                        ...classData,
+                        membership_id: membership.id                        
+                    };
+                })
+                .filter(cls => cls !== null );        
+            console.log('Processed classes:', myClasses);
             setEnrolledClasses(myClasses);
         } catch (error) {
             console.error('Error fetching enrolled classes:', error);
@@ -98,7 +112,10 @@ export default function StudentDashboard() {
     const fetchAvailableClasses = async () => {
         try {
             const res = await api.get('/classes/available/');
-            setAvailableClasses(res.data);
+            console.log('Available classes response:', res.data); 
+            // Ensure all classes have valid IDs
+            const validClasses = res.data.filter(cls => cls.id !== undefined);
+            setAvailableClasses(validClasses);
         } catch (error) {
             console.error('Error fetching available classes:', error);
         }
@@ -410,9 +427,12 @@ export default function StudentDashboard() {
                                 ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5'
                                 : 'space-y-4'
                             }>
-                                {enrolledClasses.map((cls, index) => (
-                                    <ClassCard key={cls.id} cls={cls} index={index} isEnrolled={true} />
-                                ))}
+                                {enrolledClasses
+                                    .filter(cls => cls && cls.id) 
+                                    .map((cls, index) => (
+                                        <ClassCard key={`enrolled-${cls.id}`} cls={cls} index={index} isEnrolled={true} />
+                                    ))
+                                }
                             </div>
                         )}
                     </>
@@ -435,9 +455,12 @@ export default function StudentDashboard() {
                                 ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5'
                                 : 'space-y-4'
                             }>
-                                {availableClasses.map((cls, index) => (
-                                    <ClassCard key={cls.id} cls={cls} index={index} isEnrolled={false} />
-                                ))}
+                                {availableClasses
+                                    .filter(cls => cls && cls.id) // Ensure valid class objects
+                                    .map((cls, index) => (
+                                        <ClassCard key={`available-${cls.id}`} cls={cls} index={index} isEnrolled={false} />
+                                    ))
+                                }
                             </div>
                         )}
                     </>

@@ -61,7 +61,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = 'backend.urls'
+ROOT_URLCONF = 'backend_setting.urls'
 
 TEMPLATES = [
     {
@@ -79,7 +79,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'backend.wsgi.application'
+WSGI_APPLICATION = 'backend_setting.wsgi.application'
 
 
 # Database
@@ -144,7 +144,7 @@ CORS_ALLOWED_ORIGINS = [
 
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_METHODS = ['GET', 'POST', 'OPTIONS', 'PUT', 'DELETE', 'PATCH']
-CORS_ALLOW_HEADERS = ['Content-Type', 'Authorization', 'X-Session-ID']  # ✅ Add X-Session-ID
+CORS_ALLOW_HEADERS = ['Content-Type', 'Authorization', 'X-Session-ID']  
 
 
 REST_FRAMEWORK = {
@@ -156,12 +156,10 @@ REST_FRAMEWORK = {
     ],
 }
 
-# ✅ HYBRID JWT CONFIGURATION (Like Google/Facebook)
 SIMPLE_JWT = {
     # Token Lifetimes
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=45),  # ✅ 45 phút cho session học
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),     # ✅ 1 ngày
-    
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=45), 
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),    
     'ROTATE_REFRESH_TOKENS': False,  
     'BLACKLIST_AFTER_ROTATION': False,
     'UPDATE_LAST_LOGIN': False,
