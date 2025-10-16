@@ -4,7 +4,7 @@ from .views import ( RegisterView, CustomLoginView, UserListCreateView, UserDeta
     ClassDetailView, SessionListCreateView, SessionDetailView, InviteUserView,
     AttendanceView, MaterialView, SystemAnnouncementView, ClassAnnouncementView,
     enroll_class, AdminCreateUserView, LoginHistoryView, ClassMembershipView,
-    get_available_classes, join_open_class, join_class_with_code
+    get_available_classes, join_open_class, join_class_with_code,ClassAnnouncementDetailView
 )
 from rest_framework.decorators import api_view
 
@@ -57,6 +57,7 @@ urlpatterns = [
     path('materials/', MaterialView.as_view(), name='material-list'),
     
     # Announcements
-    path('announcements/system/', SystemAnnouncementView.as_view(), name='system-announcement-list'),
-    path('announcements/class/<int:class_id>/', ClassAnnouncementView.as_view(), name='class-announcement-list'),
+    path('announcements/system/', SystemAnnouncementView.as_view(), name='system-announcements'),
+    path('announcements/class/<int:class_id>/', ClassAnnouncementView.as_view(), name='class-announcements'),
+    path('announcements/class/<int:class_id>/<int:pk>/', ClassAnnouncementDetailView.as_view(), name='class-announcement-detail'),
 ]

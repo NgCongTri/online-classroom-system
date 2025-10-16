@@ -10,6 +10,7 @@ export default function Home() {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [isAnimating, setIsAnimating] = useState(false);
   const router = useRouter();
 
   const handleChange = (e) => {
@@ -54,10 +55,8 @@ export default function Home() {
       });
       
       if (response.status === 200) {
-        // FIX: SAFE ACCESS TO USER DATA
         console.log('Login response:', response.data);
         
-        // Get user data safely
         const userData = response.data?.user;
         if (!userData) {
           console.error('No user data in response:', response.data);
@@ -66,22 +65,16 @@ export default function Home() {
           return;
         }
 
-        // ✅ V2: Save to storage
-        // session_id → sessionStorage (ISOLATED per tab)
-        // access_token → sessionStorage (ISOLATED per tab)
-        // refresh_token → httpOnly cookie (auto managed by browser)
         const accessToken = response.data.access;
         const sessionId = response.data.session_id;
         
         if (accessToken && sessionId) {
-          // ✅ Use sessionStorage instead of localStorage
-          // sessionStorage is ISOLATED per tab → No conflict!
           sessionStorage.setItem('access_token', accessToken);
           sessionStorage.setItem('session_id', sessionId);
           
-          console.log('✅ Tokens saved to sessionStorage (isolated per tab)');
-          console.log('✅ Session ID:', sessionId);
-          console.log('✅ Refresh token in cookie: refresh_token_' + sessionId);
+          console.log('Tokens saved to sessionStorage (isolated per tab)');
+          console.log('Session ID:', sessionId);
+          console.log('Refresh token in cookie: refresh_token_' + sessionId);
         } else {
           console.error('Missing tokens in response');
           setMessage('Login failed: Invalid authentication tokens');
@@ -101,7 +94,6 @@ export default function Home() {
         setMessage('Login successful!');
         setShowSuccess(true);
         
-        // FIX: SAFE NAVIGATION BASED ON ROLE - DÒNG 62 Ở ĐÂY
         setTimeout(() => {
           switch (userRole) {
             case 'admin':
@@ -154,188 +146,138 @@ export default function Home() {
 
   const handleRegister = (e) => {
     e.preventDefault();
-    router.push('/register');
+    setIsAnimating(true);
+    setTimeout(() => {
+      router.push('/register');
+    }, 700);
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#0a0a0f] relative overflow-hidden p-4">
-      {/* Background effects */}
-      <div className="fixed inset-0 pointer-events-none z-0">
-        <div className="absolute top-10 left-[-10%] w-[300px] h-[300px] bg-radial-gradient from-[#00ff88]/10 to-transparent rounded-full animate-float1"></div>
-        <div className="absolute top-60 right-[-5%] w-[200px] h-[200px] bg-radial-gradient from-[#0099ff]/6 to-transparent rounded-full animate-float2"></div>
-        <div className="absolute bottom-20 left-10 w-[150px] h-[150px] bg-radial-gradient from-[#ff0080]/4 to-transparent rounded-full animate-float3"></div>
-      </div>
-
-      <div className="relative z-10 w-full max-w-sm bg-[#151520] border border-[#2a2a35] rounded-xl p-8 shadow-2xl backdrop-blur-md font-georgia transition-all duration-300 hover:shadow-neon">
-        <div className="flex justify-center mb-5">
-          <div className="font-pacifico text-4xl bg-gradient-to-r from-[#00ff88] to-[#0099ff] bg-clip-text text-transparent drop-shadow-[0_0_15px_#00ff88] animate-pulse">
-            OCS
-          </div>
-        </div>
-
-        <div className="text-center mb-8">
-          <h2 className="text-xl font-semibold text-white mb-2">Sign In</h2>
-          <p className="text-[#a0a0b0] text-sm">Access your account</p>
-        </div>
-
-        {message && !showSuccess && (
-          <div className={`mb-5 p-3 text-center rounded-md text-sm transition-all duration-300 ${
-            message.includes('successful') ? 'bg-[#00ff88]/10 text-[#00ff88] border border-[#00ff88]/20' : 'bg-[#ff0080]/10 text-[#ff0080] border border-[#ff0080]/20'
-          }`}>
-            {message}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="relative">
-            <input
-              id="email"
-              type="email"
-              name="email"
-              value={formData.email}
-              onChange={handleChange}
-              autoComplete="email"
-              className="w-full bg-[#1a1a25] border border-[#2a2a35] rounded-md px-3 py-2.5 text-white text-sm placeholder-transparent focus:border-[#00ff88] focus:bg-[#1a1a25]/80 focus:shadow-input-glow focus:outline-none transition-all duration-300 peer"
-              placeholder="Email"
-              required
-            />
-            <label htmlFor="email" className="absolute left-3 top-2.5 text-[#a0a0b0] text-sm transition-all duration-300 peer-focus:-top-5 peer-focus:left-2 peer-focus:scale-90 peer-focus:text-[#00ff88] peer-valid:-top-5 peer-valid:left-2 peer-valid:scale-90 peer-valid:text-[#00ff88]">
-              Email
-            </label>
-          </div>
-
-          <div className="relative">
-            <input
-              id="password"
-              type={showPassword ? 'text' : 'password'}
-              name="password"
-              value={formData.password}
-              onChange={handleChange}
-              autoComplete="current-password"
-              className="w-full bg-[#1a1a25] border border-[#2a2a35] rounded-md px-3 py-2.5 pr-10 text-white text-sm placeholder-transparent focus:border-[#00ff88] focus:bg-[#1a1a25]/80 focus:shadow-input-glow focus:outline-none transition-all duration-300 peer"
-              placeholder="Password"
-              required
-            />
-            <label htmlFor="password" className="absolute left-3 top-2.5 text-[#a0a0b0] text-sm transition-all duration-300 peer-focus:-top-5 peer-focus:left-2 peer-focus:scale-90 peer-focus:text-[#00ff88] peer-valid:-top-5 peer-valid:left-2 peer-valid:scale-90 peer-valid:text-[#00ff88]">
-              Password
-            </label>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#e8eaf6] via-[#c5cae9] to-[#9fa8da] relative overflow-hidden p-4">
+      {/* Container chính với kích thước vừa phải */}
+      <div className="relative z-10 w-[768px] h-[480px] flex bg-white rounded-[20px] shadow-[0_14px_28px_rgba(0,0,0,0.25),0_10px_10px_rgba(0,0,0,0.22)] overflow-hidden">
+        
+        {/* Panel di chuyển - bên trái ban đầu */}
+        <div className={`absolute top-0 left-0 w-1/2 h-full bg-gradient-to-br from-[#00ff88] to-[#0099ff] transition-all duration-700 ease-in-out z-30 flex items-center justify-center p-12 ${
+          isAnimating ? 'translate-x-full' : 'translate-x-0'
+        }`}
+        style={{
+          borderTopLeftRadius: isAnimating ? '0' : '20px',
+          borderBottomLeftRadius: isAnimating ? '0' : '20px',
+          borderTopRightRadius: isAnimating ? '20px' : '0',
+          borderBottomRightRadius: isAnimating ? '20px' : '0'
+        }}>
+          <div className="text-center text-white">
+            <h2 className="text-[36px] font-bold mb-5 tracking-tight" style={{ fontWeight: 700 }}>Hello, Friend!</h2>
+            <p className="mb-8 text-[14px] leading-relaxed px-6 font-light" style={{ letterSpacing: '0.3px' }}>
+              Register with your personal details to use<br />all of site features
+            </p>
             <button
-              type="button"
-              onClick={handlePasswordToggle}
-              className="absolute right-3 top-2.5 text-[#a0a0b0] hover:text-[#00ff88] transition-colors duration-200 text-lg"
+              onClick={handleRegister}
+              disabled={isAnimating}
+              className="px-12 py-2.5 border-2 border-white rounded-full font-bold text-[12px] tracking-[1.5px] hover:bg-white hover:text-[#00ff88] transition-all duration-300 disabled:opacity-50 uppercase"
+              style={{ letterSpacing: '1.5px' }}
             >
-              {showPassword ? '👁️' : '🙈'}
+              Sign Up
+            </button>
+          </div>
+        </div>
+
+        {/* Phần bên trái - placeholder */}
+        <div className="w-1/2 bg-white"></div>
+
+        {/* Form Sign In - LUÔN Ở BÊN PHẢI */}
+        <div className="w-1/2 px-10 py-8 relative z-20 flex flex-col justify-center bg-white">
+          <h1 className="text-[32px] font-bold text-[#333] mb-4 text-center tracking-tight" style={{ fontWeight: 700 }}>Sign In</h1>
+
+          {/* Social Login Icons */}
+          <div className="flex justify-center gap-3 mb-4">
+            <button type="button" className="w-9 h-9 border border-[#ddd] rounded-full flex items-center justify-center text-[#333] hover:border-[#00ff88] hover:bg-[#f6f6f6] transition-all duration-300">
+              <span className="text-sm font-semibold">G+</span>
+            </button>
+            <button type="button" className="w-9 h-9 border border-[#ddd] rounded-full flex items-center justify-center text-[#333] hover:border-[#00ff88] hover:bg-[#f6f6f6] transition-all duration-300">
+              <span className="text-sm font-semibold">f</span>
+            </button>
+            <button type="button" className="w-9 h-9 border border-[#ddd] rounded-full flex items-center justify-center text-[#333] hover:border-[#00ff88] hover:bg-[#f6f6f6] transition-all duration-300">
+              <span className="text-sm font-semibold">in</span>
             </button>
           </div>
 
-          <div className="flex items-center justify-between">
-            <label className="flex items-center space-x-2 cursor-pointer">
+          <p className="text-center text-[#666] text-[12px] mb-4 font-light">or use your email password</p>
+
+          {message && !showSuccess && (
+            <div className={`mb-3 p-2 text-center rounded-md text-xs ${
+              message.includes('successful') ? 'bg-[#00ff88]/10 text-[#00ff88]' : 'bg-[#ff0080]/10 text-[#ff0080]'
+            }`}>
+              {message}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <div className="relative">
               <input
-                type="checkbox"
-                id="remember"
-                checked={rememberMe}
-                onChange={handleRememberMe}
-                className="w-4 h-4 text-[#00ff88] bg-[#1a1a25] border-[#2a2a35] rounded focus:ring-[#00ff88] focus:ring-2 transition-colors"
+                type="email"
+                name="email"
+                value={formData.email}
+                onChange={handleChange}
+                placeholder="Email"
+                className="w-full bg-[#eee] border-none rounded-md px-4 py-2.5 text-[#333] text-[12px] placeholder-[#999] focus:outline-none focus:bg-[#e0e0e0] transition-all duration-300"
+                required
               />
-              <span className="text-sm text-[#a0a0b0]">Remember me</span>
-            </label>
-            <a href="/forgot-password" onClick={handleForgotPassword} className="text-sm text-[#00ff88] hover:text-[#0099ff] transition-colors duration-200">
-              Forgot Password?
-            </a>
-          </div>
+            </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-gradient-to-r from-[#00ff88] to-[#0099ff] text-[#0a0a0f] py-2.5 rounded-md font-semibold text-sm hover:shadow-button-glow focus:shadow-button-glow focus:outline-none transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-          >
-            {loading ? (
-              <>
-                <svg className="animate-spin -ml-1 mr-3 h-4 w-4 text-[#0a0a0f]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Signing In...
-              </>
-            ) : (
-              'Sign In'
-            )}
-          </button>
-        </form>
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                name="password"
+                value={formData.password}
+                onChange={handleChange}
+                placeholder="Password"
+                className="w-full bg-[#eee] border-none rounded-md px-4 py-2.5 pr-10 text-[#333] text-[12px] placeholder-[#999] focus:outline-none focus:bg-[#e0e0e0] transition-all duration-300"
+                required
+              />
+              <button
+                type="button"
+                onClick={handlePasswordToggle}
+                className="absolute right-3 top-2.5 text-[#999] hover:text-[#666] transition-colors duration-200 text-sm"
+              >
+                {showPassword ? '👁️' : '🙈'}
+              </button>
+            </div>
 
-        <div className="relative my-5">
-          <div className="absolute inset-0 flex items-center">
-            <span className="w-full border-t border-[#2a2a35]"></span>
-          </div>
-          <div className="relative flex justify-center text-sm">
-            <span className="px-2 bg-[#151520] text-[#a0a0b0]">or</span>
-          </div>
-        </div>
-      
-        <div className="text-center">
-          <button
-            onClick={handleRegister}
-            className="w-full bg-[#1a1a25] border border-[#2a2a35] rounded-md py-2.5 text-[#00ff88] font-medium text-sm hover:bg-[#2a2a35] hover:border-[#00ff88] hover:shadow-social-glow transition-all duration-300"
-          >
-            Create an Account
-          </button>
+            <div className="text-center pt-1">
+              <a 
+                href="/forgot-password" 
+                onClick={handleForgotPassword} 
+                className="text-[12px] text-[#666] hover:text-[#00ff88] transition-colors duration-200 font-light"
+              >
+                Forget Your Password?
+              </a>
+            </div>
+
+            <div className="pt-1">
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-gradient-to-r from-[#00ff88] to-[#0099ff] text-white py-2.5 rounded-full font-bold text-[12px] tracking-[1.5px] hover:shadow-[0_0_20px_rgba(0,255,136,0.4)] focus:outline-none transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center uppercase"
+                style={{ letterSpacing: '1.5px' }}
+              >
+                {loading ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-3 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Signing In...
+                  </>
+                ) : (
+                  'Sign In'
+                )}
+              </button>
+            </div>
+          </form>
         </div>
       </div>
-
-      <style jsx>{`
-        @keyframes float1 {
-          0%, 100% { transform: translateY(0px) translateX(0px); }
-          33% { transform: translateY(-20px) translateX(10px); }
-          66% { transform: translateY(10px) translateX(-10px); }
-        }
-        @keyframes float2 {
-          0%, 100% { transform: translateY(0px) translateX(0px); }
-          33% { transform: translateY(-15px) translateX(-5px); }
-          66% { transform: translateY(5px) translateX(15px); }
-        }
-        @keyframes float3 {
-          0%, 100% { transform: translateY(0px) translateX(0px); }
-          33% { transform: translateY(10px) translateX(-10px); }
-          66% { transform: translateY(-10px) translateX(10px); }
-        }
-        @keyframes successPulse {
-          0% { transform: scale(0); }
-          50% { transform: scale(1.1); }
-          100% { transform: scale(1); }
-        }
-        .shadow-neon {
-          box-shadow: 0 0 40px rgba(0, 255, 136, 0.1);
-        }
-        .shadow-input-glow {
-          box-shadow: 0 0 20px rgba(0, 255, 136, 0.1);
-        }
-        .shadow-button-glow {
-          box-shadow: 0 0 30px rgba(0, 255, 136, 0.3);
-        }
-        .shadow-social-glow {
-          box-shadow: 0 0 20px rgba(0, 255, 136, 0.2);
-        }
-        .shadow-neon-success {
-          box-shadow: 0 0 30px rgba(0, 255, 136, 0.5);
-        }
-        .bg-radial-gradient {
-          background: radial-gradient(circle, var(--color) 0%, transparent 70%);
-        }
-        .animate-pulse {
-          animation: pulse 2s ease-in-out infinite alternate;
-        }
-        @keyframes pulse {
-          from { filter: drop-shadow(0 0 20px rgba(0, 255, 136, 0.3)); }
-          to { filter: drop-shadow(0 0 30px rgba(0, 255, 136, 0.6)); }  
-        }
-        .animate-float1 { animation: float1 6s ease-in-out infinite; }
-        .animate-float2 { animation: float2 8s ease-in-out infinite; }
-        .animate-float3 { animation: float3 7s ease-in-out infinite; }
-        .animate-successPulse { animation: successPulse 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55); }
-        .peer-valid ~ label { @apply -top-5 left-2 scale-90 text-[#00ff88]; }
-        .peer:focus ~ label { @apply -top-5 left-2 scale-90 text-[#00ff88]; }
-        .peer:has-value ~ label { @apply -top-5 left-2 scale-90 text-[#00ff88]; }
-      `}</style>
     </div>
   );
 }

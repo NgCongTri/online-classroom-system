@@ -348,8 +348,8 @@ class AnnouncementSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Announcement
-        fields = ['id', 'type', 'class_id', 'class_name', 'title', 'content', 'posted_by', 'posted_by_name', 'created_at']
-        read_only_fields = ['class_name', 'posted_by', 'created_at']
+        fields = ['id', 'type', 'class_id', 'class_name', 'title', 'content', 'posted_by', 'posted_by_name', 'posted_at']
+        read_only_fields = ['class_name', 'posted_by', 'posted_at', 'class_id', 'type']  # ✅ Thêm class_id và type vào read_only
 
     def get_class_name(self, obj):
         return obj.class_id.name if obj.class_id else None

@@ -578,37 +578,139 @@ class SystemAnnouncementView(generics.ListCreateAPIView):
             raise PermissionDenied("Only admin can create system announcements")
         serializer.save(posted_by=user, type="system", class_id=None)
 
-# ClassAnnouncementView
+# ClassAnnouncementView - Update to support CRUD
 class ClassAnnouncementView(generics.ListCreateAPIView):
     serializer_class = AnnouncementSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        class_id = self.kwargs['class_id'] or self.request.query_params.get('class_id')
+        class_id = self.kwargs.get('class_id') or self.request.query_params.get('class_id')
         user = self.request.user
 
         if not class_id:
             return Announcement.objects.none()
 
         if user.role == 'admin':
-            return Announcement.objects.filter(class_id=class_id, type="class")
+            return Announcement.objects.filter(class_id=class_id, type="class").order_by('-posted_at')
         elif user.role == 'lecturer':
-            return Announcement.objects.filter(class_id__lecturer=user, class_id=class_id, type="class").select_related('posted_by', 'class_id')
+            return Announcement.objects.filter(class_id__lecturer=user, class_id=class_id, type="class").select_related('posted_by', 'class_id').order_by('-posted_at')
         else:
-            # Student can view announcements if they are enrolled in the class
             if ClassMembership.objects.filter(class_id=class_id, user=user).exists():
-                return Announcement.objects.filter(class_id=class_id, type="class").select_related('posted_by', 'class_id')
+                return Announcement.objects.filter(class_id=class_id, type="class").select_related('posted_by', 'class_id').order_by('-posted_at')
             return Announcement.objects.none()
 
-    def perform_create(self, serializer):
-        user = self.request.user
+    def create(self, request, *args, **kwargs):
+        """Override create method để xử lý class_id từ URL"""
+        user = request.user
+        
+        # 1. Kiểm tra permission
         if user.role not in ['lecturer', 'admin']:
-            raise PermissionDenied("Only lecturers or admins can create class announcements")
-
-        class_id = self.request.data.get('class_id') or self.kwargs.get('class_id')
+            return Response(
+                {'detail': 'Only lecturers or admins can create class announcements'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # 2. Lấy class_id từ URL
+        class_id = self.kwargs.get('class_id')
         if not class_id:
-            raise ValidationError("class_id is required")
-        serializer.save(posted_by=user, type="class", class_id_id=class_id)
+            return Response(
+                {'detail': 'class_id is required in URL'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # 3. Kiểm tra class có tồn tại không
+        try:
+            class_obj = Class.objects.get(id=class_id)
+        except Class.DoesNotExist:
+            return Response(
+                {'detail': 'Class not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # 4. Nếu là lecturer, kiểm tra có phải class của họ không
+        if user.role == 'lecturer' and class_obj.lecturer != user:
+            return Response(
+                {'detail': 'You can only create announcements for your own classes'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # 5. Validate dữ liệu từ request
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        # 6. Tạo announcement với class_id từ URL
+        announcement = serializer.save(
+            posted_by=user,
+            type='class',
+            class_id=class_obj
+        )
+        
+        # 7. Trả về response
+        return Response(
+            self.get_serializer(announcement).data,
+            status=status.HTTP_201_CREATED
+        )
+
+class ClassAnnouncementDetailView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = AnnouncementSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        class_id = self.kwargs.get('class_id')
+        user = self.request.user
+
+        if user.role == 'admin':
+            return Announcement.objects.filter(class_id=class_id, type="class")
+        elif user.role == 'lecturer':
+            return Announcement.objects.filter(class_id__lecturer=user, class_id=class_id, type="class")
+        return Announcement.objects.none()
+
+    def update(self, request, *args, **kwargs):
+        """Override update để kiểm tra permission"""
+        user = request.user
+        
+        if user.role not in ['lecturer', 'admin']:
+            return Response(
+                {'detail': 'Only lecturers and admins can update announcements'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        instance = self.get_object()
+        
+        # Lecturer chỉ có thể update announcement của class họ dạy
+        if user.role == 'lecturer' and instance.class_id.lecturer != user:
+            return Response(
+                {'detail': 'You can only update announcements for your own classes'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        
+        return Response(serializer.data)
+
+    def destroy(self, request, *args, **kwargs):
+        """Override destroy để kiểm tra permission"""
+        user = request.user
+        
+        if user.role not in ['lecturer', 'admin']:
+            return Response(
+                {'detail': 'Only lecturers and admins can delete announcements'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        instance = self.get_object()
+        
+        # Lecturer chỉ có thể delete announcement của class họ dạy
+        if user.role == 'lecturer' and instance.class_id.lecturer != user:
+            return Response(
+                {'detail': 'You can only delete announcements for your own classes'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        self.perform_destroy(instance)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])

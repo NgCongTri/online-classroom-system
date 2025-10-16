@@ -18,8 +18,11 @@ export default function ClassDetailPage() {
     const [sessions, setSessions] = useState([]);
     const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
     const [showSessionModal, setShowSessionModal] = useState(false);
+    const [showEditAnnouncementModal, setShowEditAnnouncementModal] = useState(false);
+    const [showDeleteAnnouncementModal, setShowDeleteAnnouncementModal] = useState(false);
     const [announcementForm, setAnnouncementForm] = useState({ title: '', content: '' });
     const [sessionForm, setSessionForm] = useState({ topic: '', date: '' });
+    const [selectedAnnouncement, setSelectedAnnouncement] = useState(null);
     const [message, setMessage] = useState('');
     
     const isLecturer = user?.role === 'lecturer';
@@ -28,7 +31,7 @@ export default function ClassDetailPage() {
     const canEdit = isLecturer || isAdmin;
     const canPost = isLecturer || isAdmin;
 
-    // Translations - Đã sửa toàn bộ
+    // Translations
     const t = {
         en: {
             backToClasses: 'Back to Classes',
@@ -39,13 +42,18 @@ export default function ClassDetailPage() {
             classCode: 'Class Code',
             announcements: 'Announcements',
             createAnnouncement: 'Create Announcement',
+            editAnnouncement: 'Edit Announcement',
+            deleteAnnouncement: 'Delete Announcement',
             noAnnouncements: 'No announcements yet',
             students: 'Students',
             lecturer: 'Lecturer',
             title: 'Title',
             content: 'Content',
             post: 'Post',
+            update: 'Update',
+            delete: 'Delete',
             cancel: 'Cancel',
+            create: 'Create',
             loading: 'Loading...',
             enrolled: 'Enrolled',
             remove: 'Remove',
@@ -61,6 +69,8 @@ export default function ClassDetailPage() {
             noStudentsYet: 'No students enrolled yet',
             gradesComingSoon: 'Grades feature coming soon',
             activitiesComingSoon: 'Activities feature coming soon',
+            confirmDelete: 'Are you sure you want to delete this announcement?',
+            cannotUndo: 'This action cannot be undone.',
         },
         vi: {
             backToClasses: 'Quay lại Lớp học',
@@ -71,13 +81,18 @@ export default function ClassDetailPage() {
             classCode: 'Mã lớp',
             announcements: 'Thông báo',
             createAnnouncement: 'Tạo Thông báo',
+            editAnnouncement: 'Sửa Thông báo',
+            deleteAnnouncement: 'Xóa Thông báo',
             noAnnouncements: 'Chưa có thông báo',
             students: 'Học sinh',
             lecturer: 'Giảng viên',
             title: 'Tiêu đề',
             content: 'Nội dung',
             post: 'Đăng',
+            update: 'Cập nhật',
+            delete: 'Xóa',
             cancel: 'Hủy',
+            create: 'Tạo', 
             loading: 'Đang tải...',
             enrolled: 'Đã tham gia',
             remove: 'Xóa',
@@ -93,6 +108,8 @@ export default function ClassDetailPage() {
             noStudentsYet: 'Chưa có học sinh nào',
             gradesComingSoon: 'Tính năng điểm số sẽ sớm được cập nhật',
             activitiesComingSoon: 'Tính năng hoạt động sẽ sớm được cập nhật',
+            confirmDelete: 'Bạn có chắc muốn xóa thông báo này?',
+            cannotUndo: 'Hành động này không thể hoàn tác.',
         }
     };
 
@@ -169,6 +186,43 @@ export default function ClassDetailPage() {
         }
     };
 
+    const handleEditAnnouncement = (announcement) => {
+        setSelectedAnnouncement(announcement);
+        setAnnouncementForm({
+            title: announcement.title,
+            content: announcement.content
+        });
+        setShowEditAnnouncementModal(true);
+    };
+
+    const handleUpdateAnnouncement = async (e) => {
+        e.preventDefault();
+        try {
+            await api.put(`/announcements/class/${classId}/${selectedAnnouncement.id}/`, announcementForm);
+            setMessage('✅ ' + (language === 'vi' ? 'Cập nhật thông báo thành công!' : 'Announcement updated successfully!'));
+            setShowEditAnnouncementModal(false);
+            setAnnouncementForm({ title: '', content: '' });
+            setSelectedAnnouncement(null);
+            fetchAnnouncements();
+        } catch (error) {
+            console.error('Error updating announcement:', error);
+            setMessage('❌ ' + (error.response?.data?.detail || error.message));
+        }
+    };
+
+    const handleDeleteAnnouncement = async () => {
+        try {
+            await api.delete(`/announcements/class/${classId}/${selectedAnnouncement.id}/`);
+            setMessage('✅ ' + (language === 'vi' ? 'Xóa thông báo thành công!' : 'Announcement deleted successfully!'));
+            setShowDeleteAnnouncementModal(false);
+            setSelectedAnnouncement(null);
+            fetchAnnouncements();
+        } catch (error) {
+            console.error('Error deleting announcement:', error);
+            setMessage('❌ ' + (error.response?.data?.detail || error.message));
+        }
+    };
+
     const handleCreateSession = async (e) => {
         e.preventDefault();
         try {
@@ -223,7 +277,7 @@ export default function ClassDetailPage() {
         )},
         { id: 'activities', name: t[language].activities, icon: (
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
             </svg>
         )},
     ];
@@ -231,11 +285,10 @@ export default function ClassDetailPage() {
 
     return (
         <div className="min-h-screen bg-gray-50">
-            {/* Header with Class Cover */}
+            {/* Header */}
             <div className={`bg-gradient-to-r ${getClassCoverColor()} text-white`}>
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
                     <div className="flex items-center justify-end mb-4">
-                        {/* Language Switcher */}
                         <div className="flex bg-white/20 backdrop-blur-sm rounded-lg p-1">
                             <button
                                 onClick={() => setLanguage('en')}
@@ -270,7 +323,7 @@ export default function ClassDetailPage() {
                 </div>
             </div>
 
-            {/* Navigation Tabs */}
+            {/* Navigation Tabs - GIỮ NGUYÊN */}
             <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <nav className="flex space-x-8">
@@ -311,20 +364,20 @@ export default function ClassDetailPage() {
                 {/* Course Tab */}
                 {activeTab === 'course' && (
                     <div className="space-y-6">
-                        {canPost && (
-                            <div className="bg-white rounded-lg border border-gray-200 p-4">
-                                <button
-                                    onClick={() => setShowAnnouncementModal(true)}
-                                    className="w-full text-left px-4 py-3 text-gray-500 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                                >
-                                    {t[language].createAnnouncement}
-                                </button>
-                            </div>
-                        )}
-
                         {/* Announcements Section */}
                         <div className="space-y-4">
-                            <h2 className="text-xl font-semibold text-gray-900">{t[language].announcements}</h2>
+                            <div className="flex items-center justify-between">
+                                <h2 className="text-xl font-semibold text-gray-900">{t[language].announcements}</h2>
+                                {canPost && (
+                                    <button
+                                        onClick={() => setShowAnnouncementModal(true)}
+                                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium shadow-sm hover:shadow-md"
+                                    >
+                                        {t[language].create}
+                                    </button>
+                                )}
+                            </div>
+
                             {announcements.length === 0 ? (
                                 <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
                                     <svg className="w-12 h-12 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -335,29 +388,45 @@ export default function ClassDetailPage() {
                             ) : (
                                 announcements.map((announcement) => (
                                     <div key={announcement.id} className="bg-white rounded-lg border border-gray-200 p-6">
-                                        <div className="flex items-start space-x-4">
-                                            <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white font-semibold">
-                                                {announcement.posted_by_name?.charAt(0).toUpperCase() || 'L'}
-                                            </div>
+                                        <div className="flex items-start justify-between">
                                             <div className="flex-1">
-                                                <div className="flex items-center justify-between mb-2">
-                                                    <div>
-                                                        <h3 className="font-semibold text-gray-900">{announcement.posted_by_name}</h3>
-                                                        <p className="text-sm text-gray-500">
-                                                            {new Date(announcement.posted_at).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US')}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                                <h4 className="font-semibold text-lg mb-2">{announcement.title}</h4>
+                                                <h4 className="font-semibold text-lg mb-2 text-gray-900">{announcement.title}</h4>
                                                 <p className="text-gray-700 whitespace-pre-wrap">{announcement.content}</p>
                                             </div>
+                                            
+                                            {/* Nút Edit và Delete */}
+                                            {canEdit && (
+                                                <div className="flex items-center space-x-2 ml-4">
+                                                    <button
+                                                        onClick={() => handleEditAnnouncement(announcement)}
+                                                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                        title={t[language].editAnnouncement}
+                                                    >
+                                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                        </svg>
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            setSelectedAnnouncement(announcement);
+                                                            setShowDeleteAnnouncementModal(true);
+                                                        }}
+                                                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                        title={t[language].deleteAnnouncement}
+                                                    >
+                                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 ))
                             )}
                         </div>
 
-                        {/* Sessions Section */}
+                        {/* Sessions Section - GIỮ NGUYÊN */}
                         <div className="space-y-4 mt-8">
                             <div className="flex items-center justify-between">
                                 <h2 className="text-xl font-semibold text-gray-900">{t[language].sessions}</h2>
@@ -366,7 +435,7 @@ export default function ClassDetailPage() {
                                         onClick={() => setShowSessionModal(true)}
                                         className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
                                     >
-                                        {t[language].createSession}
+                                        {t[language].create}
                                     </button>
                                 )}
                             </div>
@@ -419,10 +488,9 @@ export default function ClassDetailPage() {
                     </div>
                 )}
 
-                {/* members Tab */}
+                {/* Tab member_list */}
                 {activeTab === 'member_list' && (
                     <div className="space-y-6">
-                        {/* Lecturer */}
                         <div className="bg-white rounded-lg border border-gray-200">
                             <div className="px-6 py-4 border-b border-gray-200">
                                 <h3 className="text-lg font-semibold text-gray-900">{t[language].lecturer}</h3>
@@ -439,7 +507,6 @@ export default function ClassDetailPage() {
                             </div>
                         </div>
 
-                        {/* Students */}
                         <div className="bg-white rounded-lg border border-gray-200">
                             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
                                 <h3 className="text-lg font-semibold text-gray-900">
@@ -456,7 +523,7 @@ export default function ClassDetailPage() {
                                     <div className="p-6 text-center text-gray-500">
                                         {t[language].noStudentsYet}
                                     </div>
-                                    ) : (
+                                ) : (
                                     students.map((membership) => (
                                         <div key={membership.id} className="p-6 flex items-center justify-between">
                                             <div className="flex items-center space-x-4">
@@ -475,14 +542,13 @@ export default function ClassDetailPage() {
                                                 </button>
                                             )}
                                         </div>
-                                    ))                            
+                                    ))                           
                                 )}
                             </div>
                         </div>
                     </div>
                 )}
 
-                {/* Grades Tab */}
                 {activeTab === 'grades' && (
                     <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
                         <svg className="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -492,7 +558,6 @@ export default function ClassDetailPage() {
                     </div>
                 )}
 
-                {/* activities Tab */}
                 {activeTab === 'activities' && (
                     <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
                         <svg className="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -501,25 +566,26 @@ export default function ClassDetailPage() {
                         <p className="text-gray-500">{t[language].activitiesComingSoon}</p>
                     </div>
                 )}
-            </main>
-
+            </main>            
+            
             {/* Create Announcement Modal */}
             {showAnnouncementModal && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                    <div className="bg-white rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
                         <div className="p-6">
-                            <h2 className="text-xl font-semibold text-gray-900 mb-4">
+                            <h2 className="text-2xl font-semibold text-gray-900 mb-6">
                                 {t[language].createAnnouncement}
                             </h2>
 
                             <form onSubmit={handleCreateAnnouncement} className="space-y-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
                                         {t[language].title}
                                     </label>
                                     <input
                                         type="text"
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        placeholder={t[language].createAnnouncement}
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                         value={announcementForm.title}
                                         onChange={(e) => setAnnouncementForm({ ...announcementForm, title: e.target.value })}
                                         required
@@ -527,11 +593,12 @@ export default function ClassDetailPage() {
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
                                         {t[language].content}
                                     </label>
                                     <textarea
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        placeholder={language === 'vi' ? 'Nhập nội dung thông báo...' : 'Enter announcement content...'}
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
                                         rows="6"
                                         value={announcementForm.content}
                                         onChange={(e) => setAnnouncementForm({ ...announcementForm, content: e.target.value })}
@@ -552,12 +619,113 @@ export default function ClassDetailPage() {
                                     </button>
                                     <button
                                         type="submit"
-                                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                                        className="flex items-center space-x-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-sm hover:shadow-md"
                                     >
-                                        {t[language].post}
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                                        </svg>
+                                        <span>{t[language].post}</span>
                                     </button>
                                 </div>
                             </form>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Edit Announcement Modal */}
+            {showEditAnnouncementModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                        <div className="p-6">
+                            <h2 className="text-2xl font-semibold text-gray-900 mb-4">
+                                {t[language].editAnnouncement}
+                            </h2>
+
+                            <form onSubmit={handleUpdateAnnouncement} className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        {t[language].title}
+                                    </label>
+                                    <input
+                                        type="text"
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        value={announcementForm.title}
+                                        onChange={(e) => setAnnouncementForm({ ...announcementForm, title: e.target.value })}
+                                        required
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        {t[language].content}
+                                    </label>
+                                    <textarea
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        rows="6"
+                                        value={announcementForm.content}
+                                        onChange={(e) => setAnnouncementForm({ ...announcementForm, content: e.target.value })}
+                                        required
+                                    />
+                                </div>
+
+                                <div className="flex justify-end space-x-3 pt-4">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowEditAnnouncementModal(false);
+                                            setAnnouncementForm({ title: '', content: '' });
+                                            setSelectedAnnouncement(null);
+                                        }}
+                                        className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                                    >
+                                        {t[language].cancel}
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                                    >
+                                        {t[language].update}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Delete Announcement Modal */}
+            {showDeleteAnnouncementModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl w-full max-w-md p-6">
+                        <div className="flex items-center justify-center w-12 h-12 mx-auto mb-4 bg-red-100 rounded-full">
+                            <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                        </div>
+                        <h3 className="text-lg font-semibold text-gray-900 text-center mb-2">
+                            {t[language].deleteAnnouncement}
+                        </h3>
+                        <p className="text-sm text-gray-600 text-center mb-6">
+                            {t[language].confirmDelete}<br/>
+                            <span className="text-gray-500">{t[language].cannotUndo}</span>
+                        </p>
+                        <div className="flex justify-end space-x-3">
+                            <button
+                                onClick={() => {
+                                    setShowDeleteAnnouncementModal(false);
+                                    setSelectedAnnouncement(null);
+                                }}
+                                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                            >
+                                {t[language].cancel}
+                            </button>
+                            <button
+                                onClick={handleDeleteAnnouncement}
+                                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                            >
+                                {t[language].delete}
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -582,7 +750,6 @@ export default function ClassDetailPage() {
                                     value={sessionForm.topic}
                                     onChange={(e) => setSessionForm({ ...sessionForm, topic: e.target.value })}
                                     required
-                                    placeholder={language === 'vi' ? "Nhập tên giáo viên hướng dẫn" : "Enter instructor name"}
                                 />
                             </div>
 

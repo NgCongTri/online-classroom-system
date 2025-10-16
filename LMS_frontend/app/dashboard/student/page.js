@@ -8,8 +8,8 @@ export default function StudentDashboard() {
     const router = useRouter();
     const { user, loading, logout } = useAuth();
     
-    const [enrolledClasses, setEnrolledClasses] = useState([]);
-    const [availableClasses, setAvailableClasses] = useState([]);
+    const [myClasses, setmyClasses] = useState([]);
+    const [allClasses, setallClasses] = useState([]);
     const [activeTab, setActiveTab] = useState('enrolled'); // 'enrolled' or 'available'
     const [showCodeModal, setShowCodeModal] = useState(false);
     const [selectedClass, setSelectedClass] = useState(null);
@@ -24,10 +24,10 @@ export default function StudentDashboard() {
         en: {
             logo_name: 'OCS',
             myClasses: 'My Classes',
-            availableClasses: 'Available Classes',
-            enrolledClasses: 'Enrolled Classes',
+            allClasses: 'All Classes',
+            myClasses: 'My Classes',
             noClasses: 'No classes yet',
-            noAvailableClasses: 'No available classes',
+            noallClasses: 'No available classes',
             startLearning: 'Start learning by joining a class',
             enrollMe: 'Enroll Me',
             enterCode: 'Enter Code',
@@ -46,10 +46,10 @@ export default function StudentDashboard() {
         vi: {
             logo_name: 'OCS',
             myClasses: 'Lớp Của Tôi',
-            availableClasses: 'Lớp Có Sẵn',
-            enrolledClasses: 'Lớp Đã Tham Gia',
+            allClasses: 'Tất Cả Lớp Học',
+            myClasses: 'Lớp Của Tôi',
             noClasses: 'Chưa tham gia lớp nào',
-            noAvailableClasses: 'Không có lớp nào',
+            noallClasses: 'Không có lớp nào',
             startLearning: 'Bắt đầu học bằng cách tham gia lớp',
             enrollMe: 'Ghi Danh Tôi',
             enterCode: 'Nhập Mã',
@@ -75,12 +75,12 @@ export default function StudentDashboard() {
 
     useEffect(() => {
         if (user?.role === 'student') {
-            fetchEnrolledClasses();
-            fetchAvailableClasses();
+            fetchmyClasses();
+            fetchallClasses();
         }
     }, [user]);
 
-    const fetchEnrolledClasses = async () => {
+    const fetchmyClasses = async () => {
         try {
             const res = await api.get('/class-memberships/');
             console.log('Raw API response:', res.data); 
@@ -103,19 +103,19 @@ export default function StudentDashboard() {
                 })
                 .filter(cls => cls !== null );        
             console.log('Processed classes:', myClasses);
-            setEnrolledClasses(myClasses);
+            setmyClasses(myClasses);
         } catch (error) {
             console.error('Error fetching enrolled classes:', error);
         }
     };
 
-    const fetchAvailableClasses = async () => {
+    const fetchallClasses = async () => {
         try {
             const res = await api.get('/classes/available/');
             console.log('Available classes response:', res.data); 
             // Ensure all classes have valid IDs
             const validClasses = res.data.filter(cls => cls.id !== undefined);
-            setAvailableClasses(validClasses);
+            setallClasses(validClasses);
         } catch (error) {
             console.error('Error fetching available classes:', error);
         }
@@ -125,8 +125,8 @@ export default function StudentDashboard() {
         try {
             await api.post(`/classes/${classId}/join/`);
             setMessage('✅ Successfully enrolled in class!');
-            await fetchEnrolledClasses();
-            await fetchAvailableClasses();
+            await fetchmyClasses();
+            await fetchallClasses();
             setActiveTab('enrolled'); // Switch to enrolled tab
         } catch (error) {
             setMessage('❌ ' + (error.response?.data?.detail || 'Error enrolling in class'));
@@ -143,8 +143,8 @@ export default function StudentDashboard() {
             setShowCodeModal(false);
             setSelectedClass(null);
             setJoinCode('');
-            await fetchEnrolledClasses();
-            await fetchAvailableClasses();
+            await fetchmyClasses();
+            await fetchallClasses();
             setActiveTab('enrolled'); 
         } catch (error) {
             setMessage('❌ ' + (error.response?.data?.detail || 'Error joining class'));
@@ -262,9 +262,12 @@ export default function StudentDashboard() {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                             </svg>
                         </div>
-                        <h1 className="text-xl font-semibold text-gray-800">
-                            {t[language].myClasses}
-                        </h1>
+                        <div className= "flex flex-col">
+                            <h1 className="text-[20px] font-bold neon-text font-georgia">                                                     
+                                {t[language].logo_name}
+                            </h1>
+                            <p className="text- text-[16px] text-gray-600 font-georgia">Online Classroom System</p>
+                        </div>
                     </div>
                     
                     <div className="flex items-center space-x-4">
@@ -348,7 +351,7 @@ export default function StudentDashboard() {
             )}
 
             {/* Tabs and View Toggle */}
-            <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+            <div className="bg-blue-200 border-b border-gray-200 sticky top-0 z-10">
                 <div className="max-w-7xl mx-auto px-6">
                     <div className="flex justify-between items-center">
                         <div className="flex space-x-8">
@@ -360,7 +363,7 @@ export default function StudentDashboard() {
                                         : 'border-transparent text-gray-500 hover:text-gray-700'
                                 }`}
                             >
-                                {t[language].enrolledClasses} ({enrolledClasses.length})
+                                {t[language].myClasses} ({myClasses.length})
                             </button>
                             <button
                                 onClick={() => setActiveTab('available')}
@@ -370,12 +373,12 @@ export default function StudentDashboard() {
                                         : 'border-transparent text-gray-500 hover:text-gray-700'
                                 }`}
                             >
-                                {t[language].availableClasses} ({availableClasses.length})
+                                {t[language].allClasses} ({allClasses.length})
                             </button>
                         </div>
 
                         {/* View Toggle */}
-                        <div className="flex bg-gray-100 rounded-lg p-1">
+                        <div className="flex bg-gray-200 rounded-lg p-1">
                             <button
                                 onClick={() => setViewMode('grid')}
                                 className={`p-2 rounded-md transition-all ${
@@ -412,7 +415,7 @@ export default function StudentDashboard() {
                 {/* Enrolled Classes Tab */}
                 {activeTab === 'enrolled' && (
                     <>
-                        {enrolledClasses.length === 0 ? (
+                        {myClasses.length === 0 ? (
                             <div className="text-center py-20">
                                 <div className="w-24 h-24 mx-auto mb-6 bg-gray-100 rounded-full flex items-center justify-center">
                                     <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -427,7 +430,7 @@ export default function StudentDashboard() {
                                 ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5'
                                 : 'space-y-4'
                             }>
-                                {enrolledClasses
+                                {myClasses
                                     .filter(cls => cls && cls.id) 
                                     .map((cls, index) => (
                                         <ClassCard key={`enrolled-${cls.id}`} cls={cls} index={index} isEnrolled={true} />
@@ -441,22 +444,22 @@ export default function StudentDashboard() {
                 {/* Available Classes Tab */}
                 {activeTab === 'available' && (
                     <>
-                        {availableClasses.length === 0 ? (
+                        {allClasses.length === 0 ? (
                             <div className="text-center py-20">
                                 <div className="w-24 h-24 mx-auto mb-6 bg-gray-100 rounded-full flex items-center justify-center">
                                     <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                                     </svg>
                                 </div>
-                                <h3 className="text-xl font-semibold text-gray-900 mb-2">{t[language].noAvailableClasses}</h3>
+                                <h3 className="text-xl font-semibold text-gray-900 mb-2">{t[language].noallClasses}</h3>
                             </div>
                         ) : (
                             <div className={viewMode === 'grid' 
                                 ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5'
                                 : 'space-y-4'
                             }>
-                                {availableClasses
-                                    .filter(cls => cls && cls.id) // Ensure valid class objects
+                                {allClasses
+                                    .filter(cls => cls && cls.id) 
                                     .map((cls, index) => (
                                         <ClassCard key={`available-${cls.id}`} cls={cls} index={index} isEnrolled={false} />
                                     ))

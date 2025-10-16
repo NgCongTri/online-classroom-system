@@ -30,6 +30,8 @@ body {
   color: var(--foreground);
   font-family: 'Roboto', sans-serif;
 }
+
+/*Text Font - Text Colors*/
 .font-pacifico {
   font-family: 'Pacifico', cursive;
 }
@@ -40,4 +42,16 @@ body {
 
 .font-roboto {
   font-family: 'Roboto', sans-serif;
+}
+
+.bg-neon {
+  background-image: linear-gradient(to bottom right, #00ff88, #0099ff);
+}
+
+.neon-text {
+  background: linear-gradient(to bottom, #00ff88, #0099ff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-weight: bold;
+  font-family: Georgia, serif;
 }

@@ -9,3 +9,4 @@ Nodejs/
 venv/
 classroom/logs/*.log
 *.log
+LMS_face_service/dataset/*

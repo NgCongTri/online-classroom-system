@@ -1,0 +1,6 @@
+Django
+djangorestframework
+psycopg2-binary      # Cần thiết để Django nói chuyện với PostgreSQL
+dj-database-url      # Giúp đọc chuỗi kết nối DB từ biến môi trường
+django-cors-headers  # Cho phép frontend Next.js gọi API từ backend
+gunicorn             # Web server mà Vercel sẽ dùng để chạy Django
