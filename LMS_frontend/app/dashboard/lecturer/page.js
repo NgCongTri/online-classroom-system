@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../hooks/useAuth';
 import api from '../../utils/api';
+import { getClassColor, getBorderColor } from '../../utils/class_color';
 
 export default function LecturerDashboard() {
     const router = useRouter();
@@ -163,26 +164,6 @@ export default function LecturerDashboard() {
         }
     };
 
-    const getClassCoverColor = (index) => {
-        const colors = [
-            'from-blue-600 to-blue-700',
-            'from-green-600 to-green-700',
-            'from-purple-600 to-purple-700',
-            'from-orange-600 to-orange-700',
-            'from-pink-600 to-pink-700',
-            'from-indigo-600 to-indigo-700',
-        ];
-        return colors[index % colors.length];
-    };
-
-    if (loading) {
-        return (
-            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-                <div className="text-gray-600 text-lg">{t[language].loading}</div>
-            </div>
-        );
-    }
-
     return (
         <div className="min-h-screen bg-gray-50">
             {/* Header - Google Classroom style */}
@@ -195,7 +176,7 @@ export default function LecturerDashboard() {
                             </svg>
                         </div>
                         <div>
-                            <h1 className="text-xl font-semibold text-gray-800">
+                            <h1 className="text-xl font-georgia font-bold text-gray-800">
                                 {t[language].Title}
                             </h1>
                         </div>
@@ -348,14 +329,9 @@ export default function LecturerDashboard() {
                         ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5'
                         : 'space-y-4'
                     }>
-                        {classes.map((cls, index) => {
-                            const gradientColor = getClassCoverColor(index);
-                            const borderColor = gradientColor.includes('blue') ? 'border-blue-200' :
-                                               gradientColor.includes('green') ? 'border-green-200' :
-                                               gradientColor.includes('purple') ? 'border-purple-200' :
-                                               gradientColor.includes('orange') ? 'border-orange-200' :
-                                               gradientColor.includes('pink') ? 'border-pink-200' :
-                                               'border-indigo-200';
+                        {classes.map((cls) => {                            
+                            const gradientColor = getClassColor(cls.id);
+                            const borderColor = getBorderColor(gradientColor);
                             
                             return (
                                 <div

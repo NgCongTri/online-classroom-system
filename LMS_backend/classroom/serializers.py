@@ -290,7 +290,7 @@ class SessionSerializer(serializers.ModelSerializer):
     class_name = serializers.CharField(source='class_id.name', read_only=True)
     class Meta:
         model = Session
-        fields = ['id', 'class_id', 'class_name', 'topic', 'date', 'created_at']
+        fields = ['id', 'class_id', 'class_name', 'topic', 'date', 'created_at', 'is_attendance_open']
         read_only_fields = ['created_at']
     
 class ClassMembershipSerializer(serializers.ModelSerializer):
@@ -327,20 +327,39 @@ class ClassMembershipSerializer(serializers.ModelSerializer):
 class AttendanceSerializer(serializers.ModelSerializer):
     session_topic = serializers.CharField(source='session.topic', read_only=True)
     user_name = serializers.CharField(source='user.username', read_only=True)
+    user = serializers.SerializerMethodField()
 
     class Meta:
         model = Attendance
         fields = ['id', 'session', 'session_topic', 'user', 'user_name', 'is_verified', 'joined_time']
-        read_only_fields = ['joined_time', 'user_name','session_topic', 'user']
+        read_only_fields = ['joined_time', 'user_name','session_topic']
+    
+    def get_user(self, obj):
+        """Return user details"""
+        if obj.user:
+            return {
+                'id': obj.user.id,
+                'username': obj.user.username,
+                'email': obj.user.email,
+                'role': obj.user.role
+            }
+        return None
 
 class MaterialSerializer(serializers.ModelSerializer):
     class_name = serializers.CharField(source='class_id.name', read_only=True)
     uploaded_by_name = serializers.CharField(source='uploaded_by.username', read_only=True)
+    file_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Material
-        fields = ['id', 'class_id', 'class_name', 'title', 'file', 'uploaded_by', 'uploaded_by_name', 'uploaded_at']
+        fields = ['id', 'class_id', 'class_name', 'title', 'file', 'uploaded_by', 'uploaded_by_name', 'uploaded_at', 'file_url']
         read_only_fields = ['uploaded_at', 'uploaded_by_name', 'class_name']
+
+    def get_file_url(self, obj):
+        request = self.context.get('request')
+        if obj.file and hasattr(obj.file, 'url'):
+            return request.build_absolute_uri(obj.file.url) if request else obj.file.url
+        return None
 
 class AnnouncementSerializer(serializers.ModelSerializer):
     class_name = serializers.SerializerMethodField()

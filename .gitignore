@@ -10,3 +10,4 @@ venv/
 classroom/logs/*.log
 *.log
 LMS_face_service/dataset/*
+LMS_face_service/final_dataset/*

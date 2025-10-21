@@ -3,6 +3,7 @@ from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+from rest_framework_simplejwt.authentication import JWTAuthentication
 from .serializers import (
     UserSerializer, RegistrationSerializer, AdminUserSerializer, 
     LoginHistorySerializer, ClassSerializer, SessionSerializer,
@@ -15,10 +16,11 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from .task import send_announcement_email
 from django.utils import timezone
 import logging
-from rest_framework.decorators import api_view, permission_classes, authentication_classes
+from rest_framework.decorators import api_view, permission_classes, authentication_classes,parser_classes
 from .authentication import CookieJWTAuthentication
 import json
 from rest_framework.views import APIView
+from rest_framework.parsers import MultiPartParser, FormParser
 logger = logging.getLogger(__name__)
 
 class RegisterView(generics.CreateAPIView):
@@ -514,6 +516,190 @@ class AttendanceView(generics.ListCreateAPIView):
             raise ValidationError("You have already attended this session")
         serializer.save(user=self.request.user)
 
+# Face Recognition Attendance API
+@api_view(['POST'])
+@authentication_classes([])  # No authentication required
+@permission_classes([AllowAny])  # Allow face recognition without strict auth
+def mark_attendance_with_face(request):
+    """
+    Điểm danh bằng face recognition
+    """
+    try:
+        session_id = request.data.get('session_id')
+        username = request.data.get('user_id')
+        confidence = request.data.get('confidence', 0)
+        
+        print(f"[FACE ATTENDANCE] Received request:")
+        print(f"  - session_id: {session_id}")
+        print(f"  - username: {username}")
+        print(f"  - confidence: {confidence}")
+        
+        if not session_id or not username:
+            return Response({
+                'success': False,
+                'error': 'Missing session_id or user_id'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Query user by username
+        try:
+            user = User.objects.get(username=username)
+            print(f"  ✓ User found: {user.id} - {user.username}")
+        except User.DoesNotExist:
+            print(f"  ✗ User '{username}' not found")
+            return Response({
+                'success': False,
+                'error': f'User "{username}" not found in database'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Validate session exists
+        try:
+            session = Session.objects.get(id=session_id)
+            print(f"  ✓ Session found: {session.id} - {session.topic}")
+        except Session.DoesNotExist:
+            print(f"  ✗ Session {session_id} not found")
+            return Response({
+                'success': False,
+                'error': 'Session not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Check attendance is open
+        if not session.is_attendance_open:
+            print(f"  ✗ Attendance is closed for session {session_id}")
+            return Response({
+                'success': False,
+                'error': 'Attendance is not open for this session'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        # Check enrollment
+        try:
+            enrollment = ClassMembership.objects.get(
+                user=user,
+                class_id=session.class_id,
+                role='student'
+            )
+            print(f"  ✓ User enrolled in class {session.class_id.name}")
+        except ClassMembership.DoesNotExist:
+            print(f"  ✗ User not enrolled in class {session.class_id.id}")
+            return Response({
+                'success': False,
+                'error': f'User {username} is not enrolled in this class'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        # === FIX: Đổi student → user ===
+        existing_attendance = Attendance.objects.filter(
+            session=session,
+            user=user  # ✅ ĐÚNG: "user" không phải "student"
+        ).first()
+        
+        if existing_attendance:
+            print(f"  ✗ Already attended at {existing_attendance.joined_time}")
+            return Response({
+                'success': False,
+                'error': 'Already marked attendance',
+                'attendance': {
+                    'id': existing_attendance.id,
+                    'timestamp': existing_attendance.joined_time
+                }
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # === FIX: Create attendance với "user" ===
+        attendance = Attendance.objects.create(
+            session=session,
+            user=user,
+            is_verified=True
+        )
+        
+        print(f"  ✓ Attendance created successfully: {attendance.id}")
+        
+        return Response({
+            'success': True,
+            'message': f'Attendance marked for {user.get_full_name() or user.username}',
+            'attendance': {
+                'id': attendance.id,
+                'student_name': user.get_full_name() or user.username,
+                'username': user.username,
+                'timestamp': attendance.joined_time,
+                'confidence': confidence
+            }
+        }, status=status.HTTP_201_CREATED)
+        
+    except Exception as e:
+        print(f"[ERROR] Exception in mark_attendance_with_face:")
+        import traceback
+        traceback.print_exc()
+        return Response({
+            'success': False,
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+# Toggle Attendance Status (Open/Close)
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def toggle_attendance(request, session_id):
+    """
+    Bật/Tắt điểm danh cho session (chỉ giảng viên hoặc admin)
+    
+    Request body:
+    {
+        "is_open": true  // true = mở điểm danh, false = đóng điểm danh
+    }
+    """
+    try:
+        # Kiểm tra session tồn tại
+        try:
+            session = Session.objects.get(id=session_id)
+        except Session.DoesNotExist:
+            return Response({
+                'success': False,
+                'error': 'Session not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Kiểm tra quyền (chỉ giảng viên của lớp hoặc admin)
+        if request.user.role == 'admin':
+            # Admin có quyền với mọi lớp
+            pass
+        elif request.user.role == 'lecturer':
+            # Giảng viên chỉ có quyền với lớp của mình
+            if session.class_id.lecturer != request.user and session.class_id.created_by != request.user:
+                return Response({
+                    'success': False,
+                    'error': 'You do not have permission to manage this session'
+                }, status=status.HTTP_403_FORBIDDEN)
+        else:
+            return Response({
+                'success': False,
+                'error': 'Only lecturers and admins can toggle attendance'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        # Lấy trạng thái mới từ request
+        is_open = request.data.get('is_open')
+        if is_open is None:
+            return Response({
+                'success': False,
+                'error': 'is_open field is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Cập nhật trạng thái
+        session.is_attendance_open = bool(is_open)
+        session.save()
+        
+        action = "opened" if is_open else "closed"
+        logger.info(f"[ATTENDANCE] Session {session_id} attendance {action} by {request.user.username}")
+        
+        return Response({
+            'success': True,
+            'message': f'Attendance {action}',
+            'session_id': session.id,
+            'is_attendance_open': session.is_attendance_open
+        })
+        
+    except Exception as e:
+        logger.error(f"[TOGGLE ATTENDANCE ERROR] {str(e)}")
+        return Response({
+            'success': False,
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 class ClassMembershipView(generics.ListCreateAPIView):
     serializer_class = ClassMembershipSerializer
     permission_classes = [IsAuthenticated]
@@ -563,6 +749,32 @@ class MaterialView(generics.ListCreateAPIView):
         elif user.role == 'lecturer':
             return Material.objects.filter(class_id__lecturer=user)
         return Material.objects.filter(class_id__classmembership__user=user, class_id__classmembership__role='student')
+
+class SessionMaterialsView(generics.ListAPIView):
+    serializer_class = MaterialSerializer
+    permission_classes = [IsAuthenticated]
+    parser_classes = []
+
+    def get_queryset(self):
+        session_id = self.kwargs.get('session_id')
+        user = self.request.user
+
+        try:
+            session = Session.objects.get(id=session_id)
+        except Session.DoesNotExist:
+            return Material.objects.none()
+
+        if user.role == 'admin':
+            return Material.objects.filter(class_id=session.class_id)
+        elif user.role == 'lecturer':
+            if session.class_id.lecturer == user:
+                return Material.objects.filter(class_id=session.class_id)
+            return Material.objects.none()
+        else:
+            if ClassMembership.objects.filter(class_id=session.class_id, user=user).exists():
+                return Material.objects.filter(class_id=session.class_id)
+            return Material.objects.none()
+
 
 # SystemAnnouncementView
 class SystemAnnouncementView(generics.ListCreateAPIView):
@@ -786,6 +998,46 @@ def join_class_with_code(request):
     except Class.DoesNotExist:
         return Response({'detail': 'Invalid class code'}, status=status.HTTP_404_NOT_FOUND)
 
-
-
-
+@api_view(['DELETE'])
+@authentication_classes([JWTAuthentication])  
+@permission_classes([IsAuthenticated])
+def delete_attendance(request, pk):
+    user = request.user 
+    
+    # Get attendance
+    try:
+        attendance = Attendance.objects.get(id=pk)
+    except Attendance.DoesNotExist:
+        return Response({
+            'success': False,
+            'error': 'Attendance not found'
+        }, status=status.HTTP_404_NOT_FOUND)
+    
+    # Check permission
+    session = attendance.session
+    class_obj = session.class_id
+    
+    is_lecturer = ClassMembership.objects.filter(
+        user=user,
+        class_id=class_obj,
+        role='lecturer'
+    ).exists()
+    
+    is_admin = user.role == 'admin'
+    
+    # ✅ Also check if user is the class lecturer
+    is_class_lecturer = class_obj.lecturer == user
+    
+    if not (is_lecturer or is_admin or is_class_lecturer):
+        return Response({
+            'success': False,
+            'error': 'Permission denied'
+        }, status=status.HTTP_403_FORBIDDEN)
+    
+    # Delete
+    attendance.delete()
+    
+    return Response({
+        'success': True,
+        'message': 'Attendance deleted successfully'
+    }, status=status.HTTP_200_OK)

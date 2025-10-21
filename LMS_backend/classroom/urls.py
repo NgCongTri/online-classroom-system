@@ -4,7 +4,8 @@ from .views import ( RegisterView, CustomLoginView, UserListCreateView, UserDeta
     ClassDetailView, SessionListCreateView, SessionDetailView, InviteUserView,
     AttendanceView, MaterialView, SystemAnnouncementView, ClassAnnouncementView,
     enroll_class, AdminCreateUserView, LoginHistoryView, ClassMembershipView,
-    get_available_classes, join_open_class, join_class_with_code,ClassAnnouncementDetailView
+    get_available_classes, join_open_class, join_class_with_code,ClassAnnouncementDetailView,
+    mark_attendance_with_face, toggle_attendance, delete_attendance
 )
 from rest_framework.decorators import api_view
 
@@ -45,6 +46,7 @@ urlpatterns = [
     # Session management
     path('sessions/', SessionListCreateView.as_view(), name='session-list'),
     path('sessions/<int:pk>/', SessionDetailView.as_view(), name='session-detail'),
+    path('sessions/<int:session_id>/toggle-attendance/', toggle_attendance, name='toggle-attendance'),
     
     # Membership
     path('invite/', InviteUserView.as_view(), name='invite-user'),
@@ -52,6 +54,8 @@ urlpatterns = [
     
     # Attendance
     path('attendances/', AttendanceView.as_view(), name='attendance-list'),
+    path('attendances/mark-with-face/', mark_attendance_with_face, name='mark-attendance-face'),
+    path('attendances/<int:pk>/', delete_attendance, name='delete-attendance'), 
     
     # Materials
     path('materials/', MaterialView.as_view(), name='material-list'),

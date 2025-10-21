@@ -149,6 +149,7 @@ CORS_ALLOW_HEADERS = ['Content-Type', 'Authorization', 'X-Session-ID']
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
         'classroom.authentication.CookieJWTAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': [

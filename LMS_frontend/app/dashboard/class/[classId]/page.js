@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '../../../hooks/useAuth';
 import api from '../../../utils/api';
+import { getClassColor, getBorderColor } from '@/app/utils/class_color';
 
 export default function ClassDetailPage() {
     const router = useRouter();
@@ -241,16 +242,6 @@ export default function ClassDetailPage() {
         }
     };
 
-    const getClassCoverColor = () => {
-        const colors = [
-            'from-blue-500 to-blue-600',
-            'from-green-500 to-green-600',
-            'from-purple-500 to-purple-600',
-            'from-orange-500 to-orange-600',
-        ];
-        return colors[Math.floor(Math.random() * colors.length)];
-    };
-
     if (loading || !classData) {
         return (
             <div className="min-h-screen bg-white flex items-center justify-center">
@@ -282,11 +273,12 @@ export default function ClassDetailPage() {
         )},
     ];
 
+    const header_color = getClassColor(classId);
 
     return (
         <div className="min-h-screen bg-gray-50">
             {/* Header */}
-            <div className={`bg-gradient-to-r ${getClassCoverColor()} text-white`}>
+            <div className={`bg-gradient-to-r ${header_color} text-white`}>
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
                     <div className="flex items-center justify-end mb-4">
                         <div className="flex bg-white/20 backdrop-blur-sm rounded-lg p-1">

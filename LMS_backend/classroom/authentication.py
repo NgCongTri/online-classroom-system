@@ -15,6 +15,10 @@ class CookieJWTAuthentication(BaseAuthentication):
     """
     
     def authenticate(self, request):
+        # Skip authentication for face recognition endpoint
+        if request.path == '/api/attendances/mark-with-face/':
+            return None
+        
         auth_header = request.headers.get('Authorization')
         
         if not auth_header or not auth_header.startswith('Bearer '):
