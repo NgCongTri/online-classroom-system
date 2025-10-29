@@ -8,9 +8,9 @@ from .serializers import (
     UserSerializer, RegistrationSerializer, AdminUserSerializer, 
     LoginHistorySerializer, ClassSerializer, SessionSerializer,
     ClassMembershipSerializer, AttendanceSerializer, MaterialSerializer,
-    AnnouncementSerializer
+    AnnouncementSerializer, NotificationSerializer
 )
-from .models import User, Class, Session, ClassMembership, Attendance, Material, Announcement, LoginHistory
+from .models import User, Class, Session, ClassMembership, Attendance, Material, Announcement, LoginHistory, Notification
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from .task import send_announcement_email
@@ -21,6 +21,8 @@ from .authentication import CookieJWTAuthentication
 import json
 from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.pagination import PageNumberPagination
+
 logger = logging.getLogger(__name__)
 
 class RegisterView(generics.CreateAPIView):
@@ -753,29 +755,13 @@ class MaterialView(generics.ListCreateAPIView):
 class SessionMaterialsView(generics.ListAPIView):
     serializer_class = MaterialSerializer
     permission_classes = [IsAuthenticated]
-    parser_classes = []
+    parser_classes = [MultiPartParser, FormParser]
 
     def get_queryset(self):
         session_id = self.kwargs.get('session_id')
-        user = self.request.user
-
-        try:
-            session = Session.objects.get(id=session_id)
-        except Session.DoesNotExist:
-            return Material.objects.none()
-
-        if user.role == 'admin':
-            return Material.objects.filter(class_id=session.class_id)
-        elif user.role == 'lecturer':
-            if session.class_id.lecturer == user:
-                return Material.objects.filter(class_id=session.class_id)
-            return Material.objects.none()
-        else:
-            if ClassMembership.objects.filter(class_id=session.class_id, user=user).exists():
-                return Material.objects.filter(class_id=session.class_id)
-            return Material.objects.none()
-
-
+        return Material.objects.filter(session_id=session_id)
+    
+    
 # SystemAnnouncementView
 class SystemAnnouncementView(generics.ListCreateAPIView):
     serializer_class = AnnouncementSerializer
@@ -812,7 +798,6 @@ class ClassAnnouncementView(generics.ListCreateAPIView):
             return Announcement.objects.none()
 
     def create(self, request, *args, **kwargs):
-        """Override create method để xử lý class_id từ URL"""
         user = request.user
         
         # 1. Kiểm tra permission
@@ -856,7 +841,14 @@ class ClassAnnouncementView(generics.ListCreateAPIView):
             type='class',
             class_id=class_obj
         )
-        
+        student = ClassMembership.objects.filter(class_id=class_obj, role='student').select_related('user')
+        notification = [
+            Notification( user=member.user,announcement=announcement)
+            for member in student
+        ]
+
+        Notification.objects.bulk_create(notification,ignore_conflicts=True)
+
         # 7. Trả về response
         return Response(
             self.get_serializer(announcement).data,
@@ -923,6 +915,44 @@ class ClassAnnouncementDetailView(generics.RetrieveUpdateDestroyAPIView):
         
         self.perform_destroy(instance)
         return Response(status=status.HTTP_204_NO_CONTENT)
+    
+# User notifications
+class NotificationListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        notifications = Notification.objects.filter(user=request.user).order_by('-created_at')
+        paginator = PageNumberPagination()
+        paginator.page_size = 15
+        paginated_notifications = paginator.paginate_queryset(notifications, request)
+        serializer = NotificationSerializer(paginated_notifications, many=True)
+        return paginator.get_paginated_response(serializer.data)
+    
+class UnreadNotificationCountView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        count = Notification.objects.filter(user=request.user, is_read=False).count()
+        return Response({'unread_count': count})
+    
+class MarkAllNotificationAsReadView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
+        return Response({'detail': 'All notifications marked as read'})
+    
+class MarkNotificationAsReadView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        try:
+            notification = Notification.objects.get(id=pk, user=request.user)
+            notification.is_read = True
+            notification.save()
+            return Response({'detail': 'Notification marked as read'})
+        except Notification.DoesNotExist:
+            return Response({'detail': 'Notification not found'}, status=status.HTTP_404_NOT_FOUND)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -1025,7 +1055,6 @@ def delete_attendance(request, pk):
     
     is_admin = user.role == 'admin'
     
-    # ✅ Also check if user is the class lecturer
     is_class_lecturer = class_obj.lecturer == user
     
     if not (is_lecturer or is_admin or is_class_lecturer):

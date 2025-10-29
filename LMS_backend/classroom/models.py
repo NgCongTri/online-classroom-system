@@ -3,6 +3,7 @@ from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
+from django.contrib.auth import get_user_model
 import re
 import random
 import string
@@ -98,7 +99,7 @@ class Session(models.Model):
     topic = models.CharField(max_length=100)
     date = models.DateTimeField()
     created_at = models.DateTimeField(auto_now_add=True)
-    is_attendance_open = models.BooleanField(default=False)  # Điểm danh có đang mở không
+    is_attendance_open = models.BooleanField(default=False) 
 
     def __str__(self):
         return f"{self.topic} - {self.class_id.name}"
@@ -167,3 +168,18 @@ class Announcement(models.Model):
         if not self.posted_by and hasattr(self, '_request_user'):
             self.posted_by = self._request_user
         super().save(*args, **kwargs)
+
+# Student notification
+class Notification(models.Model):
+    User = get_user_model()
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
+    announcement = models.ForeignKey(Announcement, on_delete=models.CASCADE, related_name='notifications')
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'announcement')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Notification for {self.user.username} - {self.announcement.title}"

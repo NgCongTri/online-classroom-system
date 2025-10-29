@@ -5,7 +5,8 @@ from .views import ( RegisterView, CustomLoginView, UserListCreateView, UserDeta
     AttendanceView, MaterialView, SystemAnnouncementView, ClassAnnouncementView,
     enroll_class, AdminCreateUserView, LoginHistoryView, ClassMembershipView,
     get_available_classes, join_open_class, join_class_with_code,ClassAnnouncementDetailView,
-    mark_attendance_with_face, toggle_attendance, delete_attendance
+    mark_attendance_with_face, toggle_attendance, delete_attendance,
+    UnreadNotificationCountView, MarkAllNotificationAsReadView, MarkNotificationAsReadView, NotificationListView
 )
 from rest_framework.decorators import api_view
 
@@ -64,4 +65,11 @@ urlpatterns = [
     path('announcements/system/', SystemAnnouncementView.as_view(), name='system-announcements'),
     path('announcements/class/<int:class_id>/', ClassAnnouncementView.as_view(), name='class-announcements'),
     path('announcements/class/<int:class_id>/<int:pk>/', ClassAnnouncementDetailView.as_view(), name='class-announcement-detail'),
+
+    # Notifications (for students)
+    path('notifications/', NotificationListView.as_view(), name='notification-list'),
+    path('notifications/unread-count/', UnreadNotificationCountView.as_view(), name='unread-notification-count'),
+    path('notifications/mark-all-read/', MarkAllNotificationAsReadView.as_view(), name='mark-all-notifications-read'),
+    path('notifications/<int:pk>/mark-read/', MarkNotificationAsReadView.as_view(), name='mark-notification-read'),
+
 ]

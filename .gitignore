@@ -14,3 +14,5 @@ LMS_face_service/final_dataset/*
 LMS_face_service/training_data/*
 LMS_face_service/models/*
 *.h5
+node_modules/
+package.json

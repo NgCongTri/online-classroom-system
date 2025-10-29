@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '../../../hooks/useAuth';
 import api from '../../../utils/api';
-import { getClassColor, getBorderColor } from '@/app/utils/class_color';
+import { getClassColor, getBorderColor } from '../../../utils/class_color';
 
 export default function ClassDetailPage() {
     const router = useRouter();

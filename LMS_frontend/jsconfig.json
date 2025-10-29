@@ -1,5 +1,8 @@
 {
   "compilerOptions": {
+    "jsx": "preserve",
+    "allowJs": true,
+    "esModuleInterop": true,
     "paths": {
       "@/*": ["./*"]
     }

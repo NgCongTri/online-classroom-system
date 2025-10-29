@@ -3,7 +3,7 @@ from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from .models import (User, Class, Session, ClassMembership,
-    Attendance, Material, Announcement, LoginHistory)
+    Attendance, Material, Announcement, LoginHistory, Notification)
 
 class UserSerializer(serializers.ModelSerializer):
     password_confirm = serializers.CharField(write_only=True, required=True)
@@ -368,9 +368,21 @@ class AnnouncementSerializer(serializers.ModelSerializer):
     class Meta:
         model = Announcement
         fields = ['id', 'type', 'class_id', 'class_name', 'title', 'content', 'posted_by', 'posted_by_name', 'posted_at']
-        read_only_fields = ['class_name', 'posted_by', 'posted_at', 'class_id', 'type']  # ✅ Thêm class_id và type vào read_only
+        read_only_fields = ['class_name', 'posted_by', 'posted_at', 'class_id', 'type'] 
 
     def get_class_name(self, obj):
         return obj.class_id.name if obj.class_id else None
 
+class NotificationSerializer(serializers.ModelSerializer):
+    title = serializers.CharField(source='announcement.title', read_only=True)
+    class_id = serializers.IntegerField(source='announcement.class_id.id', read_only=True)
+    class_name = serializers.CharField(source='announcement.class_id.name', read_only=True)
+    excerpt = serializers.SerializerMethodField()
 
+    class Meta:
+        model = Notification
+        fields = ['id', 'user', 'announcement', 'title', 'class_id', 'class_name', 'excerpt', 'is_read']
+        read_only_fields = ['user', 'announcement', 'title', 'class_id', 'class_name', 'excerpt'] 
+
+    def get_excerpt(self, obj):
+        return obj.announcement.content[:100] if obj.announcement else None
