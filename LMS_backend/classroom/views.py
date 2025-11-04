@@ -1,5 +1,5 @@
 from django.http import response
-from rest_framework import generics, status
+from rest_framework import generics, status, viewsets
 from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
@@ -8,10 +8,13 @@ from .serializers import (
     UserSerializer, RegistrationSerializer, AdminUserSerializer, 
     LoginHistorySerializer, ClassSerializer, SessionSerializer,
     ClassMembershipSerializer, AttendanceSerializer, MaterialSerializer,
-    AnnouncementSerializer, NotificationSerializer
+    AnnouncementSerializer, NotificationSerializer, CategorySerializer, TagSerializer
 )
-from .models import User, Class, Session, ClassMembership, Attendance, Material, Announcement, LoginHistory, Notification
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from .models import (
+    User, Class, Session, ClassMembership, Attendance, Material, Announcement, 
+    LoginHistory, Notification, Category, Tag
+)
+from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from .task import send_announcement_email
 from django.utils import timezone
@@ -326,9 +329,6 @@ class CustomTokenRefreshView(TokenRefreshView):
             except LoginHistory.DoesNotExist:
                 logger.warning(f'⚠️ Session {session_id} not found in LoginHistory')
             
-            # Return new access token (frontend will save to sessionStorage)
-            # No need to set cookie - frontend handles storage
-        
         return response
 
 class LoginHistoryView(generics.ListAPIView):
@@ -339,6 +339,31 @@ class LoginHistoryView(generics.ListAPIView):
         if self.request.user.role == 'admin':
             return LoginHistory.objects.select_related('user').order_by('-login_time')[:100]
         return LoginHistory.objects.filter(user=self.request.user).select_related('user').order_by('-login_time')[:10]
+
+# CategoryView and TagView
+class CategoryViewSet(viewsets.ModelViewSet):
+    queryset = Category.objects.all()
+    serializer_class = CategorySerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        if self.action in ['create', 'update', 'partial_update', 'destroy']:
+            self.permission_classes = [IsAdminUser]
+        else:
+            self.permission_classes = [IsAuthenticated]
+        return super().get_permissions()
+    
+class TagViewSet(viewsets.ModelViewSet):
+    queryset = Tag.objects.all()
+    serializer_class = TagSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        if self.action in ['create', 'update', 'partial_update', 'destroy']:
+            self.permission_classes = [IsAdminUser]
+        else:
+            self.permission_classes = [IsAuthenticated]
+        return super().get_permissions()
 
 # ClassView
 class ClassListCreateView(generics.ListCreateAPIView):
@@ -363,6 +388,25 @@ class ClassListCreateView(generics.ListCreateAPIView):
         elif self.request.user.role == 'lecturer':
             return Class.objects.filter(lecturer=self.request.user)
         return Class.objects.filter(classmembership__user=self.request.user, classmembership__role='student')
+
+class ClassListView(generics.ListAPIView):
+    serializer_class = ClassSerializer
+    authentication_classes = [CookieJWTAuthentication]
+    permission_classes = [IsAuthenticated]
+    pagination_class = PageNumberPagination
+
+    def get_queryset(self):
+        queryset = Class.objects.all()
+        category_slug = self.request.query_params.get('category_slug', None)
+        tag_slug = self.request.query_params.get('tag_slug', None)
+
+        if category_slug:
+            queryset = queryset.filter(category__slug=category_slug)
+        
+        if tag_slug:
+            queryset = queryset.filter(tags__slug=tag_slug)
+
+        return queryset.distinct().order_by('-id')
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -523,9 +567,6 @@ class AttendanceView(generics.ListCreateAPIView):
 @authentication_classes([])  # No authentication required
 @permission_classes([AllowAny])  # Allow face recognition without strict auth
 def mark_attendance_with_face(request):
-    """
-    Điểm danh bằng face recognition
-    """
     try:
         session_id = request.data.get('session_id')
         username = request.data.get('user_id')
@@ -638,16 +679,7 @@ def mark_attendance_with_face(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def toggle_attendance(request, session_id):
-    """
-    Bật/Tắt điểm danh cho session (chỉ giảng viên hoặc admin)
-    
-    Request body:
-    {
-        "is_open": true  // true = mở điểm danh, false = đóng điểm danh
-    }
-    """
     try:
-        # Kiểm tra session tồn tại
         try:
             session = Session.objects.get(id=session_id)
         except Session.DoesNotExist:

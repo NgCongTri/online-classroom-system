@@ -37,7 +37,7 @@ export default function StudentDashboard() {
             profile: 'Profile',
             announcements: 'Announcements',
             enrolledClasses: 'Enrolled Classes',
-            trendingClasses: 'Trending Classes',
+            AiClasses: 'AI Classes',
             attendanceRate: 'Attendance Rate',
             upcomingSessions: 'Upcoming Sessions',
             continueLearning: 'Continue Learning',
@@ -100,7 +100,7 @@ export default function StudentDashboard() {
             exploreMore: 'Khám Phá Thêm',
             viewAll: 'Xem Tất Cả',
             alreadyEnrolled: 'Đã Tham Gia',
-            trendingClasses: 'Các Lớp Học Nổi Bật',
+            AiClasses: 'Các Lớp Học AI',
             help : 'Trợ Giúp',
             settings: 'Cài Đặt',
         }
@@ -574,10 +574,10 @@ export default function StudentDashboard() {
                                     </div>
                             </div>
 
-                            {/* Trending classes */}
+                            {/* AI classes */}
                             <div>
                                 <div className="flex items-center justify-between mb-6">
-                                    <h2 className="text-2xl font-bold text-gray-900">{t[language].trendingClasses}</h2>                                    
+                                    <h2 className="text-2xl font-bold text-gray-900">{t[language].AiClasses}</h2>                                    
                                 </div>
                                 <div className="flex justify-start mt-6">
                                     {myClasses.length > 0 && (

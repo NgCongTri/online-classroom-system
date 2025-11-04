@@ -8,6 +8,7 @@ import re
 import random
 import string
 import uuid
+from django.utils.text import slugify
 
 # Manage user
 def validate_username(value):
@@ -59,6 +60,46 @@ class LoginHistory(models.Model):
     def is_active(self):
         return self.logout_time is None
 
+class Category(models.Model):
+    name = models.CharField(max_length=100, unique=True, verbose_name='Category Name')
+    slug = models.SlugField(max_length=100, unique=True, blank=True,help_text='automatic slug from the category name')
+    parent = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='child_categories', verbose_name='Parent Category')
+
+    class Meta:
+        verbose_name = 'Category'
+        verbose_name_plural = 'Categories'
+        ordering = ['name']
+
+    def __str__(self):
+        nanme = self.name
+        k = self.parent
+        while k is not None:
+            full_path.append(k.name)
+            k = k.parent
+        return ' -> '.join(full_path[::-1])
+    
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = slugify(self.name)
+        super().save(*args, **kwargs)
+
+class Tag(models.Model):
+    name = models.CharField(max_length=50, unique=True, verbose_name='Tag Name')
+    slug = models.SlugField(max_length=50, unique=True, blank=True, verbose_name='Slug')
+
+    class Meta:
+        verbose_name = 'Tag'
+        verbose_name_plural = 'Tags'
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+    
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = slugify(self.name)
+        super().save(*args, **kwargs)
+
 # Manage classes, sessions, and memberships
 class Class(models.Model):
     name = models.CharField(max_length=100, unique=True)
@@ -71,6 +112,9 @@ class Class(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     class_code = models.CharField(max_length=10, unique=True, null=True, blank=True)
     is_open_enrollment = models.BooleanField(default=False)
+    category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, blank=True, related_name='classes',verbose_name='Category')
+    tags = models.ManyToManyField(Tag, blank=True, related_name='classes', verbose_name='Tags')
+
 
     def __str__(self):
         return self.name
@@ -94,18 +138,30 @@ class Class(models.Model):
     class Meta:
         ordering = ['-created_at']
 
+
 class Session(models.Model):
     class_id = models.ForeignKey(Class, on_delete=models.CASCADE, related_name='sessions')
     topic = models.CharField(max_length=100)
     date = models.DateTimeField()
     created_at = models.DateTimeField(auto_now_add=True)
     is_attendance_open = models.BooleanField(default=False) 
+    attendance_start_time = models.DateTimeField(null=True, blank=True, verbose_name='Attendance Start Time')
+    attendance_end_time = models.DateTimeField(null=True, blank=True, verbose_name='Attendance End Time')
+    auto_attendance = models.BooleanField(default=False, verbose_name='Automatic Attendance')
 
     def __str__(self):
         return f"{self.topic} - {self.class_id.name}"
 
     class Meta:
         ordering = ['date']
+
+    def clean(self):
+        if self.attendance_start_time and self.attendance_end_time:
+            if self.attendance_start_time >= self.attendance_end_time:
+                raise ValidationError("Attendance start time must be before end time.")
+        else:
+            raise ValidationError("Both attendance start time and end time must be set.")
+        return super().clean()
 
 class ClassMembership(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='memberships')

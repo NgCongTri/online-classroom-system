@@ -1,9 +1,10 @@
 import re
+from django.utils import timezone
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from .models import (User, Class, Session, ClassMembership,
-    Attendance, Material, Announcement, LoginHistory, Notification)
+    Attendance, Material, Announcement, LoginHistory, Notification, Category, Tag)
 
 class UserSerializer(serializers.ModelSerializer):
     password_confirm = serializers.CharField(write_only=True, required=True)
@@ -138,7 +139,8 @@ class AdminUserSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'password', 'password_confirm', 'role']
+        fields = ['id', 'username', 'email', 'password', 'password_confirm', 'role'
+        ]
         extra_kwargs = {
             'password': {'write_only': True, 'required': True},
             'username': {'required': True},
@@ -221,17 +223,33 @@ class LoginHistorySerializer(serializers.ModelSerializer):
     def get_is_active(self, obj):        
         return obj.logout_time is None
 
+class CategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Category
+        fields = ['id', 'name', 'slug', 'parent']
+        read_only_fields = ['slug']
+
+class TagSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Tag
+        fields = ['id', 'name', 'slug']
+        read_only_fields = ['slug']
+
 # Khoi tao Class
 class ClassSerializer(serializers.ModelSerializer):
     lecturer_email = serializers.CharField(source='lecturer.email', read_only=True, allow_null=True)
     lecturer_name = serializers.CharField(source='lecturer.username', read_only=True, allow_null=True)
+    category = CategorySerializer(read_only=True)
+    tags = TagSerializer(many=True, read_only=True)
+    category_id = serializers.PrimaryKeyRelatedField(source='category', queryset=Category.objects.all(), write_only=True, required=False, allow_null=True)
+    tag_ids = serializers.PrimaryKeyRelatedField(source='tags', queryset=Tag.objects.all(), many=True, write_only=True, required=False)
 
     class Meta:
         model = Class
         fields = ['id', 'name', 'description', 'start_date', 'end_date', 
                   'lecturer', 'lecturer_name', 'lecturer_email', 'created_by',
-                  'created_at', 'class_code', 'is_open_enrollment']
-        read_only_fields = ['created_at']
+                  'created_at', 'class_code', 'is_open_enrollment', 'category', 'tags', 'category_id', 'tag_ids']
+        read_only_fields = ['created_at', 'lecturer_name', 'lecturer_email']
     
     def to_representation(self, instance):
         """Customize serialization to return IDs as integers"""
@@ -288,10 +306,42 @@ class ClassSerializer(serializers.ModelSerializer):
 # Khoi tao Session        
 class SessionSerializer(serializers.ModelSerializer):
     class_name = serializers.CharField(source='class_id.name', read_only=True)
+    is_attendance_available = serializers.SerializerMethodField()
+
     class Meta:
         model = Session
-        fields = ['id', 'class_id', 'class_name', 'topic', 'date', 'created_at', 'is_attendance_open']
+        fields = ['id', 'class_id', 'class_name', 'topic', 'date',
+                'created_at', 'is_attendance_open', 'attendance_start_time', 
+                'attendance_end_time', 'auto_attendance', 'is_attendance_available']
         read_only_fields = ['created_at']
+
+    def get_is_attendance_available(self, obj):
+        if not obj.auto_attendance:
+            return obj.is_attendance_open
+        
+        now = timezone.now()
+        if obj.attendance_start_time and obj.attendance_end_time:
+            return obj.attendance_start_time <= now <= obj.attendance_end_time
+        
+        return False
+
+    def validate(self, data):
+        auto_attendance = data.get('auto_attendance', False)
+        attendance_start = data.get('attendance_start_time')
+        attendance_end = data.get('attendance_end_time')
+        
+        if auto_attendance:
+            if not attendance_start or not attendance_end:
+                raise serializers.ValidationError({
+                    'attendance_start_time': 'This field is required when auto_attendance is enabled',
+                    'attendance_end_time': 'This field is required when auto_attendance is enabled'
+                })
+            if attendance_start >= attendance_end:
+                raise serializers.ValidationError({
+                    'attendance_end_time': 'Attendance end time must be after start time'
+                })
+        
+        return data
     
 class ClassMembershipSerializer(serializers.ModelSerializer):
     user_email = serializers.CharField(source='user.email', read_only=True)

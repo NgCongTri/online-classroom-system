@@ -20,6 +20,12 @@ export default function SessionDetailPage() {
     const [attendances, setAttendances] = useState([]);
     const [activeTab, setActiveTab] = useState('home');
     const [myAttendance, setMyAttendance] = useState(null);
+    const [showAttendanceSettings, setShowAttendanceSettings] = useState(false);
+    const [attendanceSettings, setAttendanceSettings] = useState({
+        auto_attendance: false,
+        attendance_start_time: '',
+        attendance_end_time: ''
+    });
     
     const isLecturer = user?.role === 'lecturer';
     const isStudent = user?.role === 'student';
@@ -62,6 +68,17 @@ export default function SessionDetailPage() {
             confirmDelete: 'Are you sure you want to delete this attendance?',
             sessionInfo: 'Session Information',
             actions: 'Actions',
+            autoAttendance: 'Auto Attendance',
+            manualControl: 'Manual Control',
+            startTime: 'Start Time',
+            endTime: 'End Time',
+            saveSettings: 'Save Settings',
+            cancel: 'Cancel',
+            attendanceSettings: 'Attendance Settings',
+            currentlyOpen: 'Currently Open',
+            currentlyClosed: 'Currently Closed',
+            willOpenAt: 'Will open at',
+            willCloseAt: 'Will close at',
         },
         vi: {
             backToClass: 'Quay lại Lớp học',
@@ -98,6 +115,17 @@ export default function SessionDetailPage() {
             confirmDelete: 'Bạn có chắc muốn xóa điểm danh này?',
             sessionInfo: 'Thông tin buổi học',
             actions: 'Thao tác',
+            autoAttendance: 'Tự động điểm danh',
+            manualControl: 'Điều khiển thủ công',
+            startTime: 'Thời gian bắt đầu',
+            endTime: 'Thời gian kết thúc',
+            saveSettings: 'Lưu cài đặt',
+            cancel: 'Hủy',
+            attendanceSettings: 'Cài đặt điểm danh',
+            currentlyOpen: 'Đang mở',
+            currentlyClosed: 'Đã đóng',
+            willOpenAt: 'Sẽ mở lúc',
+            willCloseAt: 'Sẽ đóng lúc',
         }
     };
 
@@ -113,6 +141,11 @@ export default function SessionDetailPage() {
         try {
             const res = await api.get(`/sessions/${sessionId}/`);
             setSessionData(res.data);
+            setAttendanceSettings({
+                auto_attendance: res.data.auto_attendance || false,
+                attendance_start_time: res.data.attendance_start_time || '',
+                attendance_end_time: res.data.attendance_end_time || ''
+            });
         } catch (error) {
             console.error('Error fetching session:', error);
             setMessage('Error loading session data');
@@ -153,14 +186,39 @@ export default function SessionDetailPage() {
             if (res.data.success) {
                 setSessionData({ ...sessionData, is_attendance_open: newStatus });
                 setMessage(newStatus ? 
-                    'Đã mở điểm danh - sinh viên có thể điểm danh' : 
-                    'Đã đóng điểm danh'
+                    '✅ Đã mở điểm danh - sinh viên có thể điểm danh' : 
+                    '🔒 Đã đóng điểm danh'
                 );
                 setTimeout(() => setMessage(''), 3000);
             }
         } catch (error) {
             console.error('Error toggling attendance:', error);
-            setMessage('Lỗi khi thay đổi trạng thái điểm danh');
+            setMessage('❌ Lỗi khi thay đổi trạng thái điểm danh');
+        }
+    };
+
+    const saveAttendanceSettings = async () => {
+        try {
+            // Convert local datetime to ISO string với timezone
+            const payload = {
+                auto_attendance: attendanceSettings.auto_attendance,
+                attendance_start_time: attendanceSettings.attendance_start_time 
+                    ? new Date(attendanceSettings.attendance_start_time).toISOString() 
+                    : null,
+                attendance_end_time: attendanceSettings.attendance_end_time 
+                    ? new Date(attendanceSettings.attendance_end_time).toISOString() 
+                    : null
+            };
+            
+            const res = await api.patch(`/sessions/${sessionId}/`, payload);
+            setSessionData(res.data);
+            setShowAttendanceSettings(false);
+            setMessage('✅ Đã lưu cài đặt điểm danh');
+            setTimeout(() => setMessage(''), 3000);
+        } catch (error) {
+            console.error('Error saving attendance settings:', error);
+            setMessage('❌ Lỗi khi lưu cài đặt: ' + (error.response?.data?.attendance_end_time?.[0] || error.response?.data?.message || 'Unknown error'));
+            setTimeout(() => setMessage(''), 5000);
         }
     };
 
@@ -358,37 +416,339 @@ export default function SessionDetailPage() {
                     <div className="space-y-6">
                         {/* Lecturer/Admin Controls */}
                         {(isLecturer || isAdmin) && (
-                            <div className="bg-white rounded-lg border border-gray-200 p-6">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <h3 className="text-lg font-semibold text-gray-900">
-                                            {t[language].attendance}
-                                        </h3>
-                                        <p className="text-sm text-gray-600 mt-1">
-                                            {sessionData.is_attendance_open 
-                                                ? 'Sinh viên có thể điểm danh' 
-                                                : 'Sinh viên không thể điểm danh'}
-                                        </p>
-                                    </div>
-                                    <div className="flex items-center gap-3">                                
-                                        <button
-                                            onClick={toggleAttendance}
-                                            className={`px-2 py-1.5 rounded-lg text-[16px] transition-all ${
-                                                sessionData.is_attendance_open
-                                                    ? 'bg-red-600 hover:bg-red-700 text-white'
-                                                    : 'bg-green-600 hover:bg-green-700 text-white'
-                                            }`}
+                            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                                {/* Header */}
+                                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4 border-b border-gray-200">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                                                <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                                                </svg>
+                                                {t[language].attendance}
+                                            </h3>
+                                            
+                                            {/* Status Badge */}
+                                            <div className="mt-2">
+                                                {sessionData.auto_attendance ? (
+                                                    sessionData.is_attendance_available ? (
+                                                        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
+                                                            <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                                                            {t[language].currentlyOpen}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm font-medium">
+                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                                            </svg>
+                                                            {t[language].currentlyClosed}
+                                                        </span>
+                                                    )
+                                                ) : (
+                                                    sessionData.is_attendance_open ? (
+                                                        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
+                                                            <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                                                            Đang mở (Thủ công)
+                                                        </span>
+                                                    ) : (
+                                                        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm font-medium">
+                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                                            </svg>
+                                                            Đã đóng (Thủ công)
+                                                        </span>
+                                                    )
+                                                )}
+                                            </div>
+                                        </div>
+                                        
+                                        {/* Action Buttons */}
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => setShowAttendanceSettings(!showAttendanceSettings)}
+                                                className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 rounded-lg transition-all shadow-sm hover:shadow"
                                         >
-                                            {sessionData.is_attendance_open 
-                                                ? t[language].closeAttendance 
-                                                : t[language].openAttendance}
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                            </svg>
+                                            <span className="text-sm font-medium">Cài đặt</span>
                                         </button>
+                                        
+                                        {!sessionData.auto_attendance && (
+                                            <button
+                                                onClick={toggleAttendance}
+                                                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all shadow-sm hover:shadow font-medium text-sm ${
+                                                    sessionData.is_attendance_open
+                                                        ? 'bg-red-600 hover:bg-red-700 text-white'
+                                                        : 'bg-blue-600 hover:bg-blue-700 text-white'
+                                                }`}
+                                            >
+                                                {sessionData.is_attendance_open ? (
+                                                    <>
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                                        </svg>
+                                                        Đóng điểm danh
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                                                        </svg>
+                                                        Mở điểm danh
+                                                    </>
+                                                )}
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             </div>
-                        )}
 
-                        {/* Student Attendance UI */}
+                            {/* Settings Panel - Redesigned */}
+                            {showAttendanceSettings && (
+                                <div className="p-6 bg-gray-50 border-b border-gray-200">
+                                    <div className="max-w-2xl mx-auto">
+                                        {/* Auto Attendance Card with Toggle */}
+                                        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                                            {/* Header with Toggle */}
+                                            <div className="bg-gradient-to-r from-blue-500 to-indigo-600 px-6 py-4">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+                                                            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                            </svg>
+                                                        </div>
+                                                        <div>
+                                                            <h4 className="text-white font-semibold text-base">Tự động điểm danh</h4>
+                                                            <p className="text-white/80 text-xs mt-0.5">Hệ thống tự động mở/đóng theo lịch</p>
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => setAttendanceSettings({
+                                                            ...attendanceSettings,
+                                                            auto_attendance: !attendanceSettings.auto_attendance
+                                                        })}
+                                                        className={`relative inline-flex h-8 w-14 items-center rounded-full transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-blue-600 ${
+                                                            attendanceSettings.auto_attendance ? 'bg-green-400' : 'bg-white/30'
+                                                        }`}
+                                                    >
+                                                        <span className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform duration-300 ${
+                                                            attendanceSettings.auto_attendance ? 'translate-x-7' : 'translate-x-1'
+                                                        }`} />
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {/* Time Settings - Vertical Layout */}
+                                            {attendanceSettings.auto_attendance && (
+                                                <div className="p-6 space-y-5">
+                                                    {/* Start Time */}
+                                                    <div>
+                                                        <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+                                                            <div className="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center">
+                                                                <span className="text-xs">🟢</span>
+                                                            </div>
+                                                            Thời gian bắt đầu
+                                                        </label>
+                                                        <div className="relative">
+                                                            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                                </svg>
+                                                            </div>
+                                                            <input
+                                                                type="datetime-local"
+                                                                value={attendanceSettings.attendance_start_time ? 
+                                                                    (() => {
+                                                                        const date = new Date(attendanceSettings.attendance_start_time);
+                                                                        const offset = date.getTimezoneOffset();
+                                                                        const localDate = new Date(date.getTime() - (offset * 60 * 1000));
+                                                                        return localDate.toISOString().slice(0, 16);
+                                                                    })() : ''}
+                                                                onChange={(e) => setAttendanceSettings({
+                                                                    ...attendanceSettings,
+                                                                    attendance_start_time: e.target.value
+                                                                })}
+                                                                className="w-full pl-11 pr-4 py-3 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm font-medium"
+                                                            />
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Separator */}
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray-300 to-transparent"></div>
+                                                        <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                                                        </svg>
+                                                        <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray-300 to-transparent"></div>
+                                                    </div>
+
+                                                    {/* End Time */}
+                                                    <div>
+                                                        <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+                                                            <div className="w-5 h-5 bg-red-100 rounded-full flex items-center justify-center">
+                                                                <span className="text-xs">🔴</span>
+                                                            </div>
+                                                            Thời gian kết thúc
+                                                        </label>
+                                                        <div className="relative">
+                                                            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                                                                </svg>
+                                                            </div>
+                                                            <input
+                                                                type="datetime-local"
+                                                                value={attendanceSettings.attendance_end_time ? 
+                                                                    (() => {
+                                                                        const date = new Date(attendanceSettings.attendance_end_time);
+                                                                        const offset = date.getTimezoneOffset();
+                                                                        const localDate = new Date(date.getTime() - (offset * 60 * 1000));
+                                                                        return localDate.toISOString().slice(0, 16);
+                                                                    })() : ''}
+                                                                onChange={(e) => setAttendanceSettings({
+                                                                    ...attendanceSettings,
+                                                                    attendance_end_time: e.target.value
+                                                                })}
+                                                                className="w-full pl-11 pr-4 py-3 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm font-medium"
+                                                            />
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Duration Summary */}
+                                                    {attendanceSettings.attendance_start_time && attendanceSettings.attendance_end_time && (() => {
+                                                        const start = new Date(attendanceSettings.attendance_start_time);
+                                                        const end = new Date(attendanceSettings.attendance_end_time);
+                                                        const diffMs = end - start;
+                                                        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+                                                        const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+                                                        
+                                                        return diffMs > 0 ? (
+                                                            <div className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                                                                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                                                        </svg>
+                                                                    </div>
+                                                                    <div className="flex-1">
+                                                                        <p className="text-xs font-medium text-blue-900 mb-0.5">Tổng thời gian điểm danh</p>
+                                                                        <p className="text-lg font-bold text-blue-600">
+                                                                            {diffHours > 0 && `${diffHours} giờ `}
+                                                                            {diffMinutes} phút
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        ) : diffMs < 0 ? (
+                                                            <div className="mt-4 p-4 bg-red-50 rounded-lg border border-red-200">
+                                                                <div className="flex items-center gap-2 text-sm text-red-700">
+                                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                                                    </svg>
+                                                                    <span className="font-medium">Lỗi: Thời gian kết thúc phải sau thời gian bắt đầu</span>
+                                                                </div>
+                                                            </div>
+                                                        ) : null;
+                                                    })()}
+                                                </div>
+                                            )}
+                                            
+
+                                            {/* Action Buttons */}
+                                            {attendanceSettings.auto_attendance && (
+                                                <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-3">
+                                                    <button
+                                                        onClick={() => {
+                                                            setShowAttendanceSettings(false);
+                                                            setAttendanceSettings({
+                                                                auto_attendance: sessionData.auto_attendance || false,
+                                                                attendance_start_time: sessionData.attendance_start_time || '',
+                                                                attendance_end_time: sessionData.attendance_end_time || ''
+                                                            });
+                                                        }}
+                                                        className="px-5 py-2.5 bg-white hover:bg-gray-50 text-gray-700 border-2 border-gray-300 rounded-lg transition-all font-medium text-sm shadow-sm hover:shadow flex items-center gap-2"
+                                                    >
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                                        </svg>
+                                                        Hủy
+                                                    </button>
+                                                    <button
+                                                        onClick={saveAttendanceSettings}
+                                                        disabled={!attendanceSettings.attendance_start_time || !attendanceSettings.attendance_end_time || 
+                                                                 new Date(attendanceSettings.attendance_end_time) <= new Date(attendanceSettings.attendance_start_time)}
+                                                        className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:from-gray-400 disabled:to-gray-400 disabled:cursor-not-allowed text-white rounded-lg transition-all font-medium text-sm shadow-md hover:shadow-lg flex items-center gap-2"
+                                                    >
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                                                        </svg>
+                                                        Lưu cài đặt
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Current Schedule Display (When auto is enabled and settings closed) */}
+                            {sessionData.auto_attendance && !showAttendanceSettings && sessionData.attendance_start_time && sessionData.attendance_end_time && (
+                                <div className="p-6 bg-gradient-to-br from-blue-50 to-indigo-50">
+                                    <div className="flex items-start gap-4">
+                                        <div className="flex-shrink-0 w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+                                            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                        </div>
+                                        <div className="flex-1">
+                                            <h4 className="text-sm font-semibold text-blue-900 mb-3">
+                                                ⏰ Lịch trình tự động
+                                            </h4>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                <div className="bg-white rounded-lg p-3 border border-blue-200">
+                                                    <div className="flex items-center gap-2 mb-1">
+                                                        <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                                                        <span className="text-xs font-medium text-gray-700">Bắt đầu</span>
+                                                    </div>
+                                                    <p className="text-sm font-semibold text-gray-900">
+                                                        {new Date(sessionData.attendance_start_time).toLocaleString('vi-VN', {
+                                                            weekday: 'short',
+                                                            day: '2-digit',
+                                                            month: '2-digit',
+                                                            year: 'numeric',
+                                                            hour: '2-digit',
+                                                            minute: '2-digit'
+                                                        })}
+                                                    </p>
+                                                </div>
+                                                <div className="bg-white rounded-lg p-3 border border-blue-200">
+                                                    <div className="flex items-center gap-2 mb-1">
+                                                        <span className="w-2 h-2 bg-red-500 rounded-full"></span>
+                                                        <span className="text-xs font-medium text-gray-700">Kết thúc</span>
+                                                    </div>
+                                                    <p className="text-sm font-semibold text-gray-900">
+                                                        {new Date(sessionData.attendance_end_time).toLocaleString('vi-VN', {
+                                                            weekday: 'short',
+                                                            day: '2-digit',
+                                                            month: '2-digit',
+                                                            year: 'numeric',
+                                                            hour: '2-digit',
+                                                            minute: '2-digit'
+                                                        })}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                        {/** Student Attendance UI */}
                         {isStudent && (
                             <div className="bg-white rounded-lg border border-gray-200 p-6">
                                 {myAttendance ? (

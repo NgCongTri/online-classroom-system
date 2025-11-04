@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import path, include
 from .views import ( RegisterView, CustomLoginView, UserListCreateView, UserDetailView,
     get_user, LogoutView, CustomTokenRefreshView, ClassListCreateView,
     ClassDetailView, SessionListCreateView, SessionDetailView, InviteUserView,
@@ -6,9 +6,13 @@ from .views import ( RegisterView, CustomLoginView, UserListCreateView, UserDeta
     enroll_class, AdminCreateUserView, LoginHistoryView, ClassMembershipView,
     get_available_classes, join_open_class, join_class_with_code,ClassAnnouncementDetailView,
     mark_attendance_with_face, toggle_attendance, delete_attendance,
-    UnreadNotificationCountView, MarkAllNotificationAsReadView, MarkNotificationAsReadView, NotificationListView
+    UnreadNotificationCountView, MarkAllNotificationAsReadView, MarkNotificationAsReadView,
+    NotificationListView, TagViewSet, CategoryViewSet,ClassListView
 )
 from rest_framework.decorators import api_view
+from rest_framework.routers import DefaultRouter
+
+
 
 @api_view(['GET'])
 def api_root(request):
@@ -21,6 +25,10 @@ def api_root(request):
             'token_refresh': '/api/token/refresh/'
         }
     })
+
+router = DefaultRouter()
+router.register(r'categories', CategoryViewSet, basename='category')
+router.register(r'tags', TagViewSet, basename='tag')
 
 urlpatterns = [
     path('', api_root, name='api-root'),
@@ -41,8 +49,10 @@ urlpatterns = [
     path('classes/<int:pk>/', ClassDetailView.as_view(), name='class-detail'),
     path('enroll/', enroll_class, name='enroll_class'),
     path('classes/available/', get_available_classes, name='available-classes'),
+    path('classes/explore/', ClassListView.as_view(), name='explore-classes'),
     path('classes/<int:class_id>/join/', join_open_class, name='join-open-class'),
     path('classes/join-with-code/', join_class_with_code, name='join-with-code'),
+
     
     # Session management
     path('sessions/', SessionListCreateView.as_view(), name='session-list'),
