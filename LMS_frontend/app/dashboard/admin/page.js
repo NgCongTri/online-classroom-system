@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../hooks/useAuth';
 import api from '../../utils/api';
+import { BookOpen } from 'lucide-react';
 
 export default function AdminDashboard() {
     const router = useRouter();
@@ -641,11 +642,16 @@ export default function AdminDashboard() {
             {/* Header */}
             <div className="bg-[#151520] border-b border-[#2a2a35] px-6 py-4">
                 <div className="flex justify-between items-center">
-                    <div>
-                        <h1 className="text-3xl font-bold bg-gradient-to-r from-[#00ff88] to-[#0099ff] bg-clip-text text-transparent font-georgia">
-                            {t[language].logo_name}
-                        </h1>
-                        <p className="text-white font-georgia">{t[language].dashboard}</p>
+                    <div className="flex items-center space-x-4">
+                        <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+                                    <BookOpen className="w-6 h-6 text-white" />
+                        </div>
+                        <div>
+                            <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                                EduPlatform
+                            </h1>
+                            <p className="text-gray-200 font-georgia text-sm">{t[language].dashboard}</p>
+                        </div>
                     </div>
                     
                     <div className="flex items-center space-x-4">

@@ -2,8 +2,8 @@ from django.urls import path, include
 from .views import ( RegisterView, CustomLoginView, UserListCreateView, UserDetailView,
     get_user, LogoutView, CustomTokenRefreshView, ClassListCreateView,
     ClassDetailView, SessionListCreateView, SessionDetailView, InviteUserView,
-    AttendanceView, MaterialView, SystemAnnouncementView, ClassAnnouncementView,
-    enroll_class, AdminCreateUserView, LoginHistoryView, ClassMembershipView,
+    AttendanceView, MaterialView, MaterialDetailView, ClassMaterialsView, SystemAnnouncementView, ClassAnnouncementView,
+    enroll_class, AdminCreateUserView, LoginHistoryView, ClassMembershipView, ClassMembershipDetailView,
     get_available_classes, join_open_class, join_class_with_code,ClassAnnouncementDetailView,
     mark_attendance_with_face, toggle_attendance, delete_attendance,
     UnreadNotificationCountView, MarkAllNotificationAsReadView, MarkNotificationAsReadView,
@@ -62,6 +62,7 @@ urlpatterns = [
     # Membership
     path('invite/', InviteUserView.as_view(), name='invite-user'),
     path('class-memberships/', ClassMembershipView.as_view(), name='class-membership'),
+    path('class-memberships/<int:pk>/', ClassMembershipDetailView.as_view(), name='class-membership-detail'),
     
     # Attendance
     path('attendances/', AttendanceView.as_view(), name='attendance-list'),
@@ -70,6 +71,8 @@ urlpatterns = [
     
     # Materials
     path('materials/', MaterialView.as_view(), name='material-list'),
+    path('materials/<int:pk>/', MaterialDetailView.as_view(), name='material-detail'),
+    path('classes/<int:class_id>/materials/', ClassMaterialsView.as_view(), name='class-materials'),
     
     # Announcements
     path('announcements/system/', SystemAnnouncementView.as_view(), name='system-announcements'),

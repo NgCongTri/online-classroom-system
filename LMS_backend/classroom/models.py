@@ -190,7 +190,8 @@ class Attendance(models.Model):
 # Manage materials and announcements
 class Material(models.Model):
     class_id = models.ForeignKey(Class, on_delete=models.CASCADE, related_name='materials')
-    title = models.CharField(max_length=100)
+    title = models.CharField(max_length=200)
+    description = models.TextField(blank=True, null=True)
     file = models.FileField(upload_to='materials/') 
     uploaded_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='uploaded_materials', null=True, blank=True)
     uploaded_at = models.DateTimeField(auto_now_add=True)

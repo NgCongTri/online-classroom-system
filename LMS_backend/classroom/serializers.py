@@ -243,13 +243,19 @@ class ClassSerializer(serializers.ModelSerializer):
     tags = TagSerializer(many=True, read_only=True)
     category_id = serializers.PrimaryKeyRelatedField(source='category', queryset=Category.objects.all(), write_only=True, required=False, allow_null=True)
     tag_ids = serializers.PrimaryKeyRelatedField(source='tags', queryset=Tag.objects.all(), many=True, write_only=True, required=False)
+    students_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Class
         fields = ['id', 'name', 'description', 'start_date', 'end_date', 
                   'lecturer', 'lecturer_name', 'lecturer_email', 'created_by',
-                  'created_at', 'class_code', 'is_open_enrollment', 'category', 'tags', 'category_id', 'tag_ids']
-        read_only_fields = ['created_at', 'lecturer_name', 'lecturer_email']
+                  'created_at', 'class_code', 'is_open_enrollment', 'category', 'tags', 
+                  'category_id', 'tag_ids', 'students_count']
+        read_only_fields = ['created_at', 'lecturer_name', 'lecturer_email', 'students_count']
+    
+    def get_students_count(self, obj):
+        """Return count of students (not including lecturer) in the class"""
+        return obj.memberships.filter(role='student').count()
     
     def to_representation(self, instance):
         """Customize serialization to return IDs as integers"""
@@ -347,13 +353,25 @@ class ClassMembershipSerializer(serializers.ModelSerializer):
     user_email = serializers.CharField(source='user.email', read_only=True)
     class_name = serializers.CharField(source='class_id.name', read_only=True)
     user_name = serializers.CharField(source='user.username', read_only=True)
+    user_role = serializers.CharField(source='user.role', read_only=True)
+    user_details = serializers.SerializerMethodField()
     class_data = serializers.SerializerMethodField()  
 
     class Meta:
         model = ClassMembership
-        fields = ['id', 'user', 'user_name', 'user_email', 'class_id', 'class_name', 
-                  'class_data', 'role', 'invited_at'] 
+        fields = ['id', 'user', 'user_name', 'user_email', 'user_role', 'user_details',
+                  'class_id', 'class_name', 'class_data', 'role', 'invited_at'] 
         read_only_fields = ['invited_at']
+
+    def get_user_details(self, obj):
+        if obj.user:
+            return {
+                'id': obj.user.id,
+                'username': obj.user.username,
+                'email': obj.user.email,
+                'role': obj.user.role,
+            }
+        return None
 
     def get_class_data(self, obj):
         if obj.class_id:
@@ -399,16 +417,31 @@ class MaterialSerializer(serializers.ModelSerializer):
     class_name = serializers.CharField(source='class_id.name', read_only=True)
     uploaded_by_name = serializers.CharField(source='uploaded_by.username', read_only=True)
     file_url = serializers.SerializerMethodField()
+    file_size = serializers.SerializerMethodField()
+    file_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Material
-        fields = ['id', 'class_id', 'class_name', 'title', 'file', 'uploaded_by', 'uploaded_by_name', 'uploaded_at', 'file_url']
-        read_only_fields = ['uploaded_at', 'uploaded_by_name', 'class_name']
+        fields = ['id', 'class_id', 'class_name', 'title', 'description', 'file', 'file_url', 'file_name', 'file_size', 'uploaded_by', 'uploaded_by_name', 'uploaded_at']
+        read_only_fields = ['uploaded_at', 'uploaded_by_name', 'class_name', 'file_url', 'file_name', 'file_size']
 
     def get_file_url(self, obj):
         request = self.context.get('request')
         if obj.file and hasattr(obj.file, 'url'):
             return request.build_absolute_uri(obj.file.url) if request else obj.file.url
+        return None
+    
+    def get_file_size(self, obj):
+        if obj.file:
+            try:
+                return obj.file.size
+            except:
+                return None
+        return None
+    
+    def get_file_name(self, obj):
+        if obj.file:
+            return obj.file.name.split('/')[-1]
         return None
 
 class AnnouncementSerializer(serializers.ModelSerializer):

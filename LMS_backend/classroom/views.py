@@ -765,11 +765,31 @@ class ClassMembershipView(generics.ListCreateAPIView):
             raise PermissionDenied("You can only add members to your own classes")
         serializer.save()
 
+
+class ClassMembershipDetailView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = ClassMembershipSerializer
+    permission_classes = [IsAuthenticated]
+    queryset = ClassMembership.objects.all()
+
+    def perform_destroy(self, instance):
+        user = self.request.user
+        
+        # Only lecturer, admin, or the member themselves can delete
+        if user.role == 'admin':
+            instance.delete()
+        elif user.role == 'lecturer' and instance.class_id.lecturer == user:
+            instance.delete()
+        elif instance.user == user:
+            instance.delete()
+        else:
+            raise PermissionDenied("You don't have permission to remove this member")
+
 # Manage materials
 class MaterialView(generics.ListCreateAPIView):
     queryset = Material.objects.all()
     serializer_class = MaterialSerializer
     permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
 
     def perform_create(self, serializer):
         if self.request.user.role not in ['lecturer', 'admin']:
@@ -783,6 +803,38 @@ class MaterialView(generics.ListCreateAPIView):
         elif user.role == 'lecturer':
             return Material.objects.filter(class_id__lecturer=user)
         return Material.objects.filter(class_id__classmembership__user=user, class_id__classmembership__role='student')
+
+class MaterialDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Material.objects.all()
+    serializer_class = MaterialSerializer
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+    
+    def perform_update(self, serializer):
+        if self.request.user.role not in ['lecturer', 'admin']:
+            raise PermissionDenied("Only lecturers and admin can update materials")
+        # Don't allow file update, only title and description
+        serializer.save()
+    
+    def perform_destroy(self, instance):
+        if self.request.user.role not in ['lecturer', 'admin']:
+            raise PermissionDenied("Only lecturers and admin can delete materials")
+        instance.delete()
+
+class ClassMaterialsView(generics.ListCreateAPIView):
+    serializer_class = MaterialSerializer
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+    
+    def get_queryset(self):
+        class_id = self.kwargs.get('class_id')
+        return Material.objects.filter(class_id=class_id).order_by('-uploaded_at')
+    
+    def perform_create(self, serializer):
+        if self.request.user.role not in ['lecturer', 'admin']:
+            raise PermissionDenied("Only lecturers and admin can upload materials")
+        class_id = self.kwargs.get('class_id')
+        serializer.save(uploaded_by=self.request.user, class_id_id=class_id)
 
 class SessionMaterialsView(generics.ListAPIView):
     serializer_class = MaterialSerializer
